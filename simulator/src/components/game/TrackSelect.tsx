@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useGameStore } from '@/lib/stores/game-store';
 import { TRACKS } from '@/lib/tracks/track-data';
 import { getStats } from '@/lib/data/training-data';
-import { Play, Lock, Trophy, Zap, Bot, Info, Database } from 'lucide-react';
+import { Play, Lock, Trophy, Zap, Bot, Info, Database, BarChart3 } from 'lucide-react';
 
 const difficultyColors: Record<string, string> = {
   beginner: 'text-green-400 bg-green-400/10 border-green-400/30',
@@ -137,6 +137,12 @@ export function TrackSelect() {
         {/* Footer */}
         <div className="flex items-center justify-center gap-4 text-xs text-gray-500">
           <p>Every lap you drive generates training data for the AI model.</p>
+          <Link
+            href="/dashboard"
+            className="flex items-center gap-1 text-green-400 hover:text-green-300 transition-colors flex-shrink-0"
+          >
+            <BarChart3 className="w-3.5 h-3.5" /> Dashboard
+          </Link>
           <Link
             href="/about"
             className="flex items-center gap-1 text-blue-400 hover:text-blue-300 transition-colors flex-shrink-0"

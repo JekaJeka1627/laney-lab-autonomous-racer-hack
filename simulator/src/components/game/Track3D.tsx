@@ -4,12 +4,20 @@ import { useMemo } from 'react';
 import * as THREE from 'three';
 import { getTrack, type TrackPoint } from '@/lib/tracks/track-data';
 
+const CENTER_LINE_WIDTH = 0.18;
+const DASH_LEN = 1.2;
+const GAP_LEN = 0.8;
+
 /**
- * Renders the 3D track surface, boundaries, and ground plane.
+ * Renders the 3D track surface, boundaries, center line, and ground plane.
+ * Styled after AWS DeepRacer tracks — dark asphalt, white curbs, dashed black center line.
  */
 export function Track3D({ trackId }: { trackId: string }) {
   const track = getTrack(trackId);
-  const { surfaceGeo, leftGeo, rightGeo } = useMemo(() => buildTrackGeometry(track.waypoints, track.width), [track]);
+  const { surfaceGeo, leftGeo, rightGeo, centerLineGeo } = useMemo(
+    () => buildTrackGeometry(track.waypoints, track.width),
+    [track],
+  );
 
   return (
     <group>
@@ -21,10 +29,15 @@ export function Track3D({ trackId }: { trackId: string }) {
 
       {/* Track surface */}
       <mesh geometry={surfaceGeo} position={[0, 0.01, 0]} receiveShadow>
-        <meshStandardMaterial color="#444444" side={THREE.DoubleSide} />
+        <meshStandardMaterial color="#3a3a3a" side={THREE.DoubleSide} />
       </mesh>
 
-      {/* Left boundary (red curb) */}
+      {/* Center line (dashed black — DeepRacer style) */}
+      <mesh geometry={centerLineGeo} position={[0, 0.025, 0]}>
+        <meshStandardMaterial color="#111111" side={THREE.DoubleSide} />
+      </mesh>
+
+      {/* Left boundary (red/white curb) */}
       <mesh geometry={leftGeo} position={[0, 0.05, 0]}>
         <meshStandardMaterial color="#cc3333" />
       </mesh>
@@ -34,10 +47,14 @@ export function Track3D({ trackId }: { trackId: string }) {
         <meshStandardMaterial color="#eeeeee" />
       </mesh>
 
-      {/* Start/finish line */}
-      <mesh position={[track.spawnPos[0], 0.02, track.spawnPos[2]]} rotation={[-Math.PI / 2, 0, track.spawnRotation]}>
-        <planeGeometry args={[track.width * 2, 0.5]} />
-        <meshStandardMaterial color="#ffffff" opacity={0.8} transparent />
+      {/* Start/finish line — checkerboard style */}
+      <mesh position={[track.spawnPos[0], 0.03, track.spawnPos[2]]} rotation={[-Math.PI / 2, 0, track.spawnRotation]}>
+        <planeGeometry args={[track.width * 2, 0.6]} />
+        <meshStandardMaterial color="#ffffff" opacity={0.9} transparent />
+      </mesh>
+      <mesh position={[track.spawnPos[0], 0.031, track.spawnPos[2]]} rotation={[-Math.PI / 2, 0, track.spawnRotation]}>
+        <planeGeometry args={[track.width * 2, 0.15]} />
+        <meshStandardMaterial color="#111111" />
       </mesh>
     </group>
   );
@@ -89,6 +106,59 @@ function buildTrackGeometry(waypoints: TrackPoint[], halfWidth: number) {
     }
   }
 
+  // --- Center line (dashed) ---
+  const centerVerts: number[] = [];
+  const centerIndices: number[] = [];
+  let accumulated = 0;
+  let drawing = true; // start with a dash
+  let cIdx = 0;
+
+  for (let i = 0; i < n; i++) {
+    const curr = waypoints[i];
+    const next = waypoints[(i + 1) % n];
+    const sdx = next.x - curr.x;
+    const sdz = next.z - curr.z;
+    const segLen = Math.sqrt(sdx * sdx + sdz * sdz) || 0.01;
+    const dirX = sdx / segLen;
+    const dirZ = sdz / segLen;
+    // Perpendicular
+    const pnx = -dirZ;
+    const pnz = dirX;
+
+    let traveled = 0;
+    while (traveled < segLen) {
+      const threshold = drawing ? DASH_LEN : GAP_LEN;
+      const remaining = threshold - accumulated;
+      const step = Math.min(remaining, segLen - traveled);
+
+      if (drawing) {
+        // Start point of this dash segment
+        const sx = curr.x + dirX * traveled;
+        const sz = curr.z + dirZ * traveled;
+        // End point
+        const ex = curr.x + dirX * (traveled + step);
+        const ez = curr.z + dirZ * (traveled + step);
+
+        const hw = CENTER_LINE_WIDTH;
+        const base = cIdx;
+        centerVerts.push(sx + pnx * hw, 0, sz + pnz * hw);
+        centerVerts.push(sx - pnx * hw, 0, sz - pnz * hw);
+        centerVerts.push(ex + pnx * hw, 0, ez + pnz * hw);
+        centerVerts.push(ex - pnx * hw, 0, ez - pnz * hw);
+        centerIndices.push(base, base + 2, base + 1);
+        centerIndices.push(base + 1, base + 2, base + 3);
+        cIdx += 4;
+      }
+
+      traveled += step;
+      accumulated += step;
+      if (accumulated >= (drawing ? DASH_LEN : GAP_LEN)) {
+        accumulated = 0;
+        drawing = !drawing;
+      }
+    }
+  }
+
   function makeGeo(verts: number[], indices: number[]) {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
@@ -101,5 +171,6 @@ function buildTrackGeometry(waypoints: TrackPoint[], halfWidth: number) {
     surfaceGeo: makeGeo(surfaceVerts, surfaceIndices),
     leftGeo: makeGeo(leftVerts, leftIndices),
     rightGeo: makeGeo(rightVerts, rightIndices),
+    centerLineGeo: makeGeo(centerVerts, centerIndices),
   };
 }
