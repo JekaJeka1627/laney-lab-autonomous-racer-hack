@@ -1,8 +1,10 @@
 'use client';
 
+import Link from 'next/link';
 import { useGameStore } from '@/lib/stores/game-store';
 import { TRACKS } from '@/lib/tracks/track-data';
-import { Play, Lock, Trophy, Zap, Bot } from 'lucide-react';
+import { getStats } from '@/lib/data/training-data';
+import { Play, Lock, Trophy, Zap, Bot, Info, Database } from 'lucide-react';
 
 const difficultyColors: Record<string, string> = {
   beginner: 'text-green-400 bg-green-400/10 border-green-400/30',
@@ -129,11 +131,38 @@ export function TrackSelect() {
           })}
         </div>
 
+        {/* Training data stats */}
+        <DataBar />
+
         {/* Footer */}
-        <p className="text-center text-xs text-gray-500">
-          Every lap you drive generates training data for the AI model.
-          The more you drive, the smarter the racer gets.
-        </p>
+        <div className="flex items-center justify-center gap-4 text-xs text-gray-500">
+          <p>Every lap you drive generates training data for the AI model.</p>
+          <Link
+            href="/about"
+            className="flex items-center gap-1 text-blue-400 hover:text-blue-300 transition-colors flex-shrink-0"
+          >
+            <Info className="w-3.5 h-3.5" /> About
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DataBar() {
+  const stats = typeof window !== 'undefined' ? getStats() : null;
+  if (!stats || stats.totalRuns === 0) return null;
+
+  return (
+    <div className="bg-white/5 border border-gray-700 rounded-2xl px-5 py-3 flex items-center justify-between">
+      <div className="flex items-center gap-2 text-sm text-gray-300">
+        <Database className="w-4 h-4 text-green-400" />
+        <span className="font-medium">Training Data</span>
+      </div>
+      <div className="flex items-center gap-4 text-xs text-gray-400">
+        <span><strong className="text-white">{stats.totalRuns}</strong> runs</span>
+        <span><strong className="text-white">{stats.totalLaps}</strong> laps</span>
+        <span><strong className="text-white">{stats.totalFrames.toLocaleString()}</strong> frames</span>
       </div>
     </div>
   );

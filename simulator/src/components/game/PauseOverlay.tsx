@@ -35,8 +35,9 @@ export function PauseOverlay() {
     setMode('driving');
   }
 
-  function backToMenu() {
-    setMode('menu');
+  function endRun() {
+    // Go to run-complete screen which saves data
+    setMode('run-complete');
   }
 
   return (
@@ -63,7 +64,7 @@ export function PauseOverlay() {
             <RotateCcw className="w-4 h-4" /> Restart
           </button>
           <button
-            onClick={backToMenu}
+            onClick={endRun}
             className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 font-medium transition-colors"
           >
             <Home className="w-4 h-4" /> Back to Menu

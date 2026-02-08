@@ -32,7 +32,7 @@ export interface ControlFrame {
 
 interface GameState {
   // Game mode
-  mode: 'menu' | 'driving' | 'paused' | 'replay' | 'autonomous' | 'auto-paused';
+  mode: 'menu' | 'driving' | 'paused' | 'replay' | 'autonomous' | 'auto-paused' | 'run-complete';
   trackId: string;
   driveMode: 'manual' | 'ai';
   setTrackId: (id: string) => void;

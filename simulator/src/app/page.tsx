@@ -8,6 +8,7 @@ import { Minimap } from '@/components/minimap/Minimap';
 import { KeyboardHandler } from '@/components/game/KeyboardHandler';
 import { PauseOverlay } from '@/components/game/PauseOverlay';
 import { AutoControls } from '@/components/game/AutoControls';
+import { RunComplete } from '@/components/game/RunComplete';
 
 const GameScene = dynamic(
   () => import('@/components/game/GameScene').then((m) => ({ default: m.GameScene })),
@@ -31,6 +32,7 @@ export default function Home() {
           <Minimap />
           <PauseOverlay />
           <AutoControls />
+          <RunComplete />
         </div>
       )}
     </>

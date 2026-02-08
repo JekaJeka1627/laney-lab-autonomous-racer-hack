@@ -1,7 +1,6 @@
 'use client';
 
 import { useGameStore } from '@/lib/stores/game-store';
-import { getTrack } from '@/lib/tracks/track-data';
 import { Play, Pause, Square, Bot } from 'lucide-react';
 
 /**
@@ -28,21 +27,8 @@ export function AutoControls() {
   }
 
   function handleStop() {
-    // Reset car to spawn and return to menu
-    const store = useGameStore.getState();
-    const track = getTrack(store.trackId);
-    store.updateCar({
-      x: track.spawnPos[0],
-      z: track.spawnPos[2],
-      rotation: track.spawnRotation,
-      speed: 0,
-      steering: 0,
-      throttle: 0,
-    });
-    store.resetLaps();
-    store.clearControlLog();
-    store.setDriveMode('manual');
-    store.setMode('menu');
+    // Go to run-complete screen which saves data, then back to menu
+    setMode('run-complete');
   }
 
   return (
