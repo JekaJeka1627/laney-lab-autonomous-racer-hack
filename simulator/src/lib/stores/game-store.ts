@@ -70,6 +70,10 @@ interface GameState {
   setOffTrack: (v: boolean) => void;
   offTrackCount: number;
 
+  // Speed limiter (0–100 percentage of MAX_SPEED)
+  maxSpeedPct: number;
+  setMaxSpeedPct: (pct: number) => void;
+
   // Timer
   elapsedMs: number;
   setElapsedMs: (ms: number) => void;
@@ -149,6 +153,14 @@ export const useGameStore = create<GameState>((set, get) => ({
     }
   },
   offTrackCount: 0,
+
+  maxSpeedPct: 60,
+  setMaxSpeedPct: (pct) => {
+    set({ maxSpeedPct: pct });
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('deepracer-max-speed', String(pct));
+    }
+  },
 
   elapsedMs: 0,
   setElapsedMs: (ms) => set({ elapsedMs: ms }),

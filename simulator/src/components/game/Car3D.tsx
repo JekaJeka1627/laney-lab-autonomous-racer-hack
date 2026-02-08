@@ -43,6 +43,7 @@ export function Car3D() {
     const dt = Math.min(delta, 0.05); // cap delta
     const car = { ...store.car };
     const track = getTrack(store.trackId);
+    const effectiveMaxSpeed = MAX_SPEED * (store.maxSpeedPct / 100);
 
     if (isAuto) {
       // --- AI waypoint-following driver ---
@@ -86,10 +87,11 @@ export function Car3D() {
       const turnSharpness = Math.abs(angleDiff);
       const targetSpeed = turnSharpness > 0.5 ? AI_TARGET_SPEED * 0.5 : AI_TARGET_SPEED;
 
-      if (car.speed < targetSpeed) {
-        car.speed = Math.min(car.speed + ACCELERATION * dt, targetSpeed);
+      const clampedTarget = Math.min(targetSpeed, effectiveMaxSpeed);
+      if (car.speed < clampedTarget) {
+        car.speed = Math.min(car.speed + ACCELERATION * dt, clampedTarget);
       } else {
-        car.speed = Math.max(car.speed - FRICTION * 2 * dt, targetSpeed);
+        car.speed = Math.max(car.speed - FRICTION * 2 * dt, clampedTarget);
       }
 
       // Turn
@@ -111,7 +113,7 @@ export function Car3D() {
       car.throttle = Math.max(0, throttle);
 
       if (up) {
-        car.speed = Math.min(car.speed + ACCELERATION * dt, MAX_SPEED);
+        car.speed = Math.min(car.speed + ACCELERATION * dt, effectiveMaxSpeed);
       } else if (down) {
         car.speed = Math.max(car.speed - BRAKE_FORCE * dt, -5);
       } else {
