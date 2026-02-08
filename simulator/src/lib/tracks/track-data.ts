@@ -42,6 +42,39 @@ function sCurveTrack(): TrackPoint[] {
   return pts;
 }
 
+/**
+ * Compute the heading angle from the spawn point toward the nearest
+ * next waypoint so the car faces along the track at start.
+ */
+function computeSpawnRotation(spawnX: number, spawnZ: number, waypoints: TrackPoint[]): number {
+  // Find closest waypoint
+  let closestIdx = 0;
+  let closestDist = Infinity;
+  for (let i = 0; i < waypoints.length; i++) {
+    const dx = waypoints[i].x - spawnX;
+    const dz = waypoints[i].z - spawnZ;
+    const d = dx * dx + dz * dz;
+    if (d < closestDist) { closestDist = d; closestIdx = i; }
+  }
+  // Aim toward the next waypoint after the closest
+  const nextIdx = (closestIdx + 1) % waypoints.length;
+  const dx = waypoints[nextIdx].x - spawnX;
+  const dz = waypoints[nextIdx].z - spawnZ;
+  return Math.atan2(dx, dz);
+}
+
+const ovalWaypoints = ovalTrack(0, 0, 30, 20, 64);
+const sCurveWaypoints = sCurveTrack();
+const cityWaypoints: TrackPoint[] = [
+  { x: -25, z: -25 }, { x: -25, z: 25 }, { x: -15, z: 30 },
+  { x: 0, z: 25 }, { x: 5, z: 15 }, { x: 15, z: 10 },
+  { x: 25, z: 15 }, { x: 30, z: 25 }, { x: 25, z: 30 },
+  { x: 15, z: 25 }, { x: 10, z: 15 }, { x: 15, z: 5 },
+  { x: 25, z: 0 }, { x: 25, z: -15 }, { x: 20, z: -25 },
+  { x: 10, z: -30 }, { x: 0, z: -25 }, { x: -10, z: -30 },
+  { x: -20, z: -28 },
+];
+
 export const TRACKS: TrackDef[] = [
   {
     id: 'oval',
@@ -50,8 +83,8 @@ export const TRACKS: TrackDef[] = [
     description: 'Simple loop — learn the controls',
     width: 5,
     spawnPos: [30, 0.5, 0],
-    spawnRotation: Math.PI / 2,
-    waypoints: ovalTrack(0, 0, 30, 20, 64),
+    spawnRotation: computeSpawnRotation(30, 0, ovalWaypoints),
+    waypoints: ovalWaypoints,
   },
   {
     id: 's-curves',
@@ -60,8 +93,8 @@ export const TRACKS: TrackDef[] = [
     description: 'Tests smooth steering transitions',
     width: 4.5,
     spawnPos: [0, 0.5, -40],
-    spawnRotation: 0,
-    waypoints: sCurveTrack(),
+    spawnRotation: computeSpawnRotation(0, -40, sCurveWaypoints),
+    waypoints: sCurveWaypoints,
     unlockRequirement: { totalClassLaps: 10 },
   },
   {
@@ -71,7 +104,7 @@ export const TRACKS: TrackDef[] = [
     description: 'Tight turns, intersections',
     width: 4,
     spawnPos: [-25, 0.5, -25],
-    spawnRotation: 0,
+    spawnRotation: computeSpawnRotation(-25, -25, cityWaypoints),
     waypoints: [
       { x: -25, z: -25 }, { x: -25, z: 25 }, { x: -15, z: 30 },
       { x: 0, z: 25 }, { x: 5, z: 15 }, { x: 15, z: 10 },
