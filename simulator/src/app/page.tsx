@@ -10,6 +10,7 @@ import { PauseOverlay } from '@/components/game/PauseOverlay';
 import { AutoControls } from '@/components/game/AutoControls';
 import { RunComplete } from '@/components/game/RunComplete';
 import { SpeedLimiter } from '@/components/hud/SpeedLimiter';
+import { ManualDriveControls } from '@/components/hud/ManualDriveControls';
 
 const GameScene = dynamic(
   () => import('@/components/game/GameScene').then((m) => ({ default: m.GameScene })),
@@ -34,6 +35,7 @@ export default function Home() {
           <PauseOverlay />
           <AutoControls />
           <SpeedLimiter />
+          <ManualDriveControls />
           <RunComplete />
         </div>
       )}

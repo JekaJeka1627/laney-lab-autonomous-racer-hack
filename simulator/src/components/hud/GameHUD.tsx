@@ -1,7 +1,7 @@
 'use client';
 
 import { useGameStore } from '@/lib/stores/game-store';
-import { Gauge, Timer, Trophy, Zap, AlertTriangle, Bot, Pause, Square } from 'lucide-react';
+import { Gauge, Timer, Trophy, Zap, AlertTriangle, Bot, Pause, Play, Square } from 'lucide-react';
 
 function formatTime(ms: number): string {
   const totalSec = ms / 1000;
@@ -102,26 +102,6 @@ export function GameHUD() {
             />
           </div>
         </div>
-
-        {/* Manual controls — Pause + Stop buttons */}
-        {!isAI && mode === 'driving' && (
-          <div className="flex items-center gap-3 pointer-events-auto">
-            <button
-              onClick={() => setMode('paused')}
-              className="flex items-center gap-2 px-5 py-3 rounded-xl bg-yellow-500 hover:bg-yellow-400 text-black font-bold text-sm shadow-lg shadow-yellow-500/30 transition-all active:scale-95"
-            >
-              <Pause className="w-5 h-5" />
-              Pause
-            </button>
-            <button
-              onClick={() => setMode('run-complete')}
-              className="flex items-center gap-2 px-5 py-3 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-sm shadow-lg shadow-red-600/30 transition-all active:scale-95"
-            >
-              <Square className="w-5 h-5" />
-              Stop
-            </button>
-          </div>
-        )}
 
         {/* Lap timer */}
         <div className="bg-black/60 backdrop-blur-sm rounded-xl px-4 py-3 text-white">
