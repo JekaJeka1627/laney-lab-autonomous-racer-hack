@@ -2,7 +2,7 @@
 
 import { useGameStore } from '@/lib/stores/game-store';
 import { TRACKS } from '@/lib/tracks/track-data';
-import { Play, Lock, Trophy, Zap } from 'lucide-react';
+import { Play, Lock, Trophy, Zap, Bot } from 'lucide-react';
 
 const difficultyColors: Record<string, string> = {
   beginner: 'text-green-400 bg-green-400/10 border-green-400/30',
@@ -20,12 +20,10 @@ export function TrackSelect() {
   const xp = useGameStore((s) => s.xp);
   const lapCount = useGameStore((s) => s.lapCount);
 
-  function startDriving(trackId: string) {
+  function initTrack(trackId: string) {
     setTrackId(trackId);
-    setMode('driving');
     useGameStore.getState().resetLaps();
     useGameStore.getState().clearControlLog();
-    // Set spawn position
     const track = TRACKS.find((t) => t.id === trackId)!;
     useGameStore.getState().updateCar({
       x: track.spawnPos[0],
@@ -35,6 +33,18 @@ export function TrackSelect() {
       steering: 0,
       throttle: 0,
     });
+  }
+
+  function startDriving(trackId: string) {
+    initTrack(trackId);
+    useGameStore.getState().setDriveMode('manual');
+    setMode('driving');
+  }
+
+  function startAutonomous(trackId: string) {
+    initTrack(trackId);
+    useGameStore.getState().setDriveMode('ai');
+    setMode('autonomous');
   }
 
   return (
@@ -100,8 +110,17 @@ export function TrackSelect() {
                     )}
                   </div>
                   {!locked && (
-                    <div className="flex-shrink-0 w-12 h-12 rounded-full bg-blue-600 flex items-center justify-center">
-                      <Play className="w-5 h-5 ml-0.5" />
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); startAutonomous(track.id); }}
+                        className="w-11 h-11 rounded-full bg-purple-600 hover:bg-purple-500 flex items-center justify-center transition-colors"
+                        title="Watch AI drive"
+                      >
+                        <Bot className="w-5 h-5" />
+                      </button>
+                      <div className="w-12 h-12 rounded-full bg-blue-600 flex items-center justify-center">
+                        <Play className="w-5 h-5 ml-0.5" />
+                      </div>
                     </div>
                   )}
                 </div>

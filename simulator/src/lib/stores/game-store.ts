@@ -32,10 +32,12 @@ export interface ControlFrame {
 
 interface GameState {
   // Game mode
-  mode: 'menu' | 'driving' | 'paused' | 'replay';
+  mode: 'menu' | 'driving' | 'paused' | 'replay' | 'autonomous' | 'auto-paused';
   trackId: string;
+  driveMode: 'manual' | 'ai';
   setTrackId: (id: string) => void;
   setMode: (mode: GameState['mode']) => void;
+  setDriveMode: (dm: GameState['driveMode']) => void;
 
   // Car
   car: CarState;
@@ -76,8 +78,10 @@ interface GameState {
 export const useGameStore = create<GameState>((set, get) => ({
   mode: 'menu',
   trackId: 'oval',
+  driveMode: 'manual',
   setTrackId: (id) => set({ trackId: id }),
   setMode: (mode) => set({ mode }),
+  setDriveMode: (dm) => set({ driveMode: dm }),
 
   car: { x: 30, z: 0, rotation: Math.PI / 2, speed: 0, steering: 0, throttle: 0 },
   updateCar: (partial) => set((s) => ({ car: { ...s.car, ...partial } })),

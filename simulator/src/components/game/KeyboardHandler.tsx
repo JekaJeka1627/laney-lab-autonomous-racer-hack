@@ -18,8 +18,16 @@ export function KeyboardHandler() {
         return;
       }
 
+      // Space toggles pause in autonomous mode
+      if (e.key === ' ') {
+        e.preventDefault();
+        if (store.mode === 'autonomous') store.setMode('auto-paused');
+        else if (store.mode === 'auto-paused') store.setMode('autonomous');
+        return;
+      }
+
       // Prevent arrow keys from scrolling
-      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) {
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
         e.preventDefault();
       }
 

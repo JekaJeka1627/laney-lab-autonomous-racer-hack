@@ -7,6 +7,7 @@ import { GameHUD } from '@/components/hud/GameHUD';
 import { Minimap } from '@/components/minimap/Minimap';
 import { KeyboardHandler } from '@/components/game/KeyboardHandler';
 import { PauseOverlay } from '@/components/game/PauseOverlay';
+import { AutoControls } from '@/components/game/AutoControls';
 
 const GameScene = dynamic(
   () => import('@/components/game/GameScene').then((m) => ({ default: m.GameScene })),
@@ -16,10 +17,12 @@ const GameScene = dynamic(
 export default function Home() {
   const mode = useGameStore((s) => s.mode);
 
+  const inGame = mode !== 'menu';
+
   return (
     <>
       <KeyboardHandler />
-      {mode === 'menu' ? (
+      {!inGame ? (
         <TrackSelect />
       ) : (
         <div className="relative w-screen h-screen overflow-hidden bg-black">
@@ -27,6 +30,7 @@ export default function Home() {
           <GameHUD />
           <Minimap />
           <PauseOverlay />
+          <AutoControls />
         </div>
       )}
     </>

@@ -1,7 +1,7 @@
 'use client';
 
 import { useGameStore } from '@/lib/stores/game-store';
-import { Gauge, Timer, Trophy, Zap, AlertTriangle } from 'lucide-react';
+import { Gauge, Timer, Trophy, Zap, AlertTriangle, Bot } from 'lucide-react';
 
 function formatTime(ms: number): string {
   const totalSec = ms / 1000;
@@ -22,7 +22,9 @@ export function GameHUD() {
   const offTrack = useGameStore((s) => s.offTrack);
   const elapsedMs = useGameStore((s) => s.elapsedMs);
   const trackId = useGameStore((s) => s.trackId);
+  const driveMode = useGameStore((s) => s.driveMode);
 
+  const isAI = driveMode === 'ai';
   const speedKmh = Math.abs(car.speed * 3.6).toFixed(0);
   const speedPct = Math.min(100, (Math.abs(car.speed) / 25) * 100);
 
@@ -49,12 +51,22 @@ export function GameHUD() {
           </div>
         </div>
 
-        {/* XP */}
-        <div className="bg-black/60 backdrop-blur-sm rounded-xl px-4 py-3 text-white">
-          <div className="flex items-center gap-2">
-            <Zap className="w-4 h-4 text-yellow-400" />
-            <span className="text-lg font-bold">{xp}</span>
-            <span className="text-xs text-gray-400">XP</span>
+        {/* AI badge or XP */}
+        <div className="flex items-center gap-2">
+          {isAI && (
+            <div className="bg-purple-900/60 backdrop-blur-sm rounded-xl px-4 py-3 text-white">
+              <div className="flex items-center gap-2">
+                <Bot className="w-4 h-4 text-purple-400" />
+                <span className="text-sm font-medium text-purple-300">AI Driving</span>
+              </div>
+            </div>
+          )}
+          <div className="bg-black/60 backdrop-blur-sm rounded-xl px-4 py-3 text-white">
+            <div className="flex items-center gap-2">
+              <Zap className="w-4 h-4 text-yellow-400" />
+              <span className="text-lg font-bold">{xp}</span>
+              <span className="text-xs text-gray-400">XP</span>
+            </div>
           </div>
         </div>
       </div>
@@ -97,14 +109,16 @@ export function GameHUD() {
           </div>
         </div>
 
-        {/* Controls hint */}
-        <div className="bg-black/60 backdrop-blur-sm rounded-xl px-4 py-3 text-white text-xs space-y-1">
-          <div className="text-gray-400 font-medium">Controls</div>
-          <div><kbd className="bg-gray-700 px-1.5 py-0.5 rounded text-[10px]">W</kbd> / <kbd className="bg-gray-700 px-1.5 py-0.5 rounded text-[10px]">↑</kbd> Accelerate</div>
-          <div><kbd className="bg-gray-700 px-1.5 py-0.5 rounded text-[10px]">S</kbd> / <kbd className="bg-gray-700 px-1.5 py-0.5 rounded text-[10px]">↓</kbd> Brake</div>
-          <div><kbd className="bg-gray-700 px-1.5 py-0.5 rounded text-[10px]">A D</kbd> / <kbd className="bg-gray-700 px-1.5 py-0.5 rounded text-[10px]">← →</kbd> Steer</div>
-          <div><kbd className="bg-gray-700 px-1.5 py-0.5 rounded text-[10px]">ESC</kbd> Pause</div>
-        </div>
+        {/* Controls hint — only for manual mode */}
+        {!isAI && (
+          <div className="bg-black/60 backdrop-blur-sm rounded-xl px-4 py-3 text-white text-xs space-y-1">
+            <div className="text-gray-400 font-medium">Controls</div>
+            <div><kbd className="bg-gray-700 px-1.5 py-0.5 rounded text-[10px]">W</kbd> / <kbd className="bg-gray-700 px-1.5 py-0.5 rounded text-[10px]">↑</kbd> Accelerate</div>
+            <div><kbd className="bg-gray-700 px-1.5 py-0.5 rounded text-[10px]">S</kbd> / <kbd className="bg-gray-700 px-1.5 py-0.5 rounded text-[10px]">↓</kbd> Brake</div>
+            <div><kbd className="bg-gray-700 px-1.5 py-0.5 rounded text-[10px]">A D</kbd> / <kbd className="bg-gray-700 px-1.5 py-0.5 rounded text-[10px]">← →</kbd> Steer</div>
+            <div><kbd className="bg-gray-700 px-1.5 py-0.5 rounded text-[10px]">ESC</kbd> Pause</div>
+          </div>
+        )}
       </div>
     </div>
   );
