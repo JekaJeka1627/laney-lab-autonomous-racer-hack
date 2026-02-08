@@ -1,7 +1,7 @@
 'use client';
 
 import { useGameStore } from '@/lib/stores/game-store';
-import { Gauge, Timer, Trophy, Zap, AlertTriangle, Bot } from 'lucide-react';
+import { Gauge, Timer, Trophy, Zap, AlertTriangle, Bot, Pause, Square } from 'lucide-react';
 
 function formatTime(ms: number): string {
   const totalSec = ms / 1000;
@@ -23,6 +23,8 @@ export function GameHUD() {
   const elapsedMs = useGameStore((s) => s.elapsedMs);
   const trackId = useGameStore((s) => s.trackId);
   const driveMode = useGameStore((s) => s.driveMode);
+  const mode = useGameStore((s) => s.mode);
+  const setMode = useGameStore((s) => s.setMode);
 
   const isAI = driveMode === 'ai';
   const speedKmh = Math.abs(car.speed * 3.6).toFixed(0);
@@ -101,6 +103,26 @@ export function GameHUD() {
           </div>
         </div>
 
+        {/* Manual controls — Pause + Stop buttons */}
+        {!isAI && mode === 'driving' && (
+          <div className="flex items-center gap-3 pointer-events-auto">
+            <button
+              onClick={() => setMode('paused')}
+              className="flex items-center gap-2 px-5 py-3 rounded-xl bg-yellow-500 hover:bg-yellow-400 text-black font-bold text-sm shadow-lg shadow-yellow-500/30 transition-all active:scale-95"
+            >
+              <Pause className="w-5 h-5" />
+              Pause
+            </button>
+            <button
+              onClick={() => setMode('run-complete')}
+              className="flex items-center gap-2 px-5 py-3 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-sm shadow-lg shadow-red-600/30 transition-all active:scale-95"
+            >
+              <Square className="w-5 h-5" />
+              Stop
+            </button>
+          </div>
+        )}
+
         {/* Lap timer */}
         <div className="bg-black/60 backdrop-blur-sm rounded-xl px-4 py-3 text-white">
           <div className="flex items-center gap-2">
@@ -108,18 +130,16 @@ export function GameHUD() {
             <span className="text-2xl font-bold font-mono">{formatTime(elapsedMs)}</span>
           </div>
         </div>
-
-        {/* Controls hint — only for manual mode */}
-        {!isAI && (
-          <div className="bg-black/60 backdrop-blur-sm rounded-xl px-4 py-3 text-white text-xs space-y-1">
-            <div className="text-gray-400 font-medium">Controls</div>
-            <div><kbd className="bg-gray-700 px-1.5 py-0.5 rounded text-[10px]">W</kbd> / <kbd className="bg-gray-700 px-1.5 py-0.5 rounded text-[10px]">↑</kbd> Accelerate</div>
-            <div><kbd className="bg-gray-700 px-1.5 py-0.5 rounded text-[10px]">S</kbd> / <kbd className="bg-gray-700 px-1.5 py-0.5 rounded text-[10px]">↓</kbd> Brake</div>
-            <div><kbd className="bg-gray-700 px-1.5 py-0.5 rounded text-[10px]">A D</kbd> / <kbd className="bg-gray-700 px-1.5 py-0.5 rounded text-[10px]">← →</kbd> Steer</div>
-            <div><kbd className="bg-gray-700 px-1.5 py-0.5 rounded text-[10px]">ESC</kbd> Pause</div>
-          </div>
-        )}
       </div>
+
+      {/* Controls hint — only for manual mode, top-right area below XP */}
+      {!isAI && mode === 'driving' && (
+        <div className="absolute bottom-20 right-4 bg-black/40 backdrop-blur-sm rounded-xl px-3 py-2 text-white text-xs space-y-0.5">
+          <div><kbd className="bg-gray-700 px-1 py-0.5 rounded text-[9px]">W</kbd> / <kbd className="bg-gray-700 px-1 py-0.5 rounded text-[9px]">↑</kbd> Gas</div>
+          <div><kbd className="bg-gray-700 px-1 py-0.5 rounded text-[9px]">S</kbd> / <kbd className="bg-gray-700 px-1 py-0.5 rounded text-[9px]">↓</kbd> Brake</div>
+          <div><kbd className="bg-gray-700 px-1 py-0.5 rounded text-[9px]">A D</kbd> / <kbd className="bg-gray-700 px-1 py-0.5 rounded text-[9px]">← →</kbd> Steer</div>
+        </div>
+      )}
     </div>
   );
 }

@@ -101,14 +101,24 @@ export default function DashboardPage() {
       </header>
 
       <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
+        {/* What is this? */}
+        <div className="bg-blue-900/20 border border-blue-800/30 rounded-2xl p-5 space-y-2">
+          <h2 className="text-sm font-bold text-blue-300">What is this dashboard?</h2>
+          <p className="text-sm text-gray-400 leading-relaxed">
+            Every time you drive in the simulator, the app records your <strong className="text-white">steering</strong>, <strong className="text-white">speed</strong>, <strong className="text-white">throttle</strong>, and <strong className="text-white">position</strong> ~10 times per second.
+            This is called <strong className="text-white">training data</strong>. Later, a neural network will learn to drive by studying these recordings — just like how a self-driving car learns from human examples.
+            The more laps the class drives, the better the AI will become.
+          </p>
+        </div>
+
         {/* Stats cards */}
         {stats && (
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-            <StatCard icon={Database} label="Training Runs" value={stats.totalRuns} color="blue" />
-            <StatCard icon={Trophy} label="Total Laps" value={stats.totalLaps} color="yellow" />
-            <StatCard icon={Activity} label="Data Frames" value={stats.totalFrames.toLocaleString()} color="green" />
-            <StatCard icon={Timer} label="Best Lap" value={stats.bestLapMs ? `${(stats.bestLapMs / 1000).toFixed(2)}s` : '—'} color="purple" />
-            <StatCard icon={Users} label="Drive Time" value={formatDuration(stats.totalDriveTimeMs)} color="cyan" />
+            <StatCard icon={Database} label="Training Runs" value={stats.totalRuns} color="blue" hint="Each time you drive and stop = 1 run" />
+            <StatCard icon={Trophy} label="Total Laps" value={stats.totalLaps} color="yellow" hint="Complete laps around the track" />
+            <StatCard icon={Activity} label="Data Frames" value={stats.totalFrames.toLocaleString()} color="green" hint="Snapshots of your driving (~10/sec)" />
+            <StatCard icon={Timer} label="Best Lap" value={stats.bestLapMs ? `${(stats.bestLapMs / 1000).toFixed(2)}s` : '—'} color="purple" hint="Fastest lap time recorded" />
+            <StatCard icon={Users} label="Drive Time" value={formatDuration(stats.totalDriveTimeMs)} color="cyan" hint="Total time spent driving" />
           </div>
         )}
 
@@ -154,7 +164,7 @@ export default function DashboardPage() {
   );
 }
 
-function StatCard({ icon: Icon, label, value, color }: { icon: typeof Database; label: string; value: string | number; color: string }) {
+function StatCard({ icon: Icon, label, value, color, hint }: { icon: typeof Database; label: string; value: string | number; color: string; hint?: string }) {
   const colors: Record<string, string> = {
     blue: 'text-blue-400 bg-blue-400/10 border-blue-400/20',
     yellow: 'text-yellow-400 bg-yellow-400/10 border-yellow-400/20',
@@ -169,6 +179,7 @@ function StatCard({ icon: Icon, label, value, color }: { icon: typeof Database; 
         <span className="text-xs uppercase tracking-wider opacity-70">{label}</span>
       </div>
       <div className="text-2xl font-bold text-white">{value}</div>
+      {hint && <div className="text-[10px] text-gray-500 mt-1">{hint}</div>}
     </div>
   );
 }

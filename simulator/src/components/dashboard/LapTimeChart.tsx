@@ -59,6 +59,9 @@ export function LapTimeChart({ runs }: { runs: TrainingRun[] }) {
           <span className="flex items-center gap-1.5"><span className="w-3 h-0.5 bg-green-400 rounded" /> Trend</span>
         </div>
       </div>
+      <p className="text-xs text-gray-500 leading-relaxed">
+        Each dot is your best lap time from one driving session. <strong className="text-gray-300">Lower = faster.</strong> The green trend line shows whether you&apos;re improving over time. Purple dots = AI driving, blue dots = you driving.
+      </p>
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ maxHeight: 350 }}>
         {/* Grid lines */}
         {yTicks.map((t) => (

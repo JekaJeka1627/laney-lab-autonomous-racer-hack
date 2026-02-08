@@ -53,6 +53,7 @@ export function SpeedDistribution({ runs }: { runs: TrainingRun[] }) {
       {/* Speed distribution */}
       <div className="bg-gray-900/50 border border-gray-800 rounded-2xl p-6 space-y-4">
         <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wider">Speed Distribution</h3>
+        <p className="text-xs text-gray-500">How fast were you going? Each bar shows how many data frames were recorded at that speed range. A tall bar means you spent a lot of time at that speed.</p>
         <svg viewBox={`0 0 ${W} ${H}`} className="w-full">
           {speedBuckets.map((count, i) => {
             const barW = (W - PAD.left - PAD.right) / speedBuckets.length - 2;
@@ -81,6 +82,7 @@ export function SpeedDistribution({ runs }: { runs: TrainingRun[] }) {
       {/* Steering distribution */}
       <div className="bg-gray-900/50 border border-gray-800 rounded-2xl p-6 space-y-4">
         <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wider">Steering Distribution</h3>
+        <p className="text-xs text-gray-500">How much did you turn? Center (green) = driving straight. Bars to the left/right = turning. Good drivers have a tall center bar with small side bars.</p>
         <svg viewBox={`0 0 ${W} ${H}`} className="w-full">
           {steerBuckets.map((count, i) => {
             const barW = (W - PAD.left - PAD.right) / steerBuckets.length - 1;
