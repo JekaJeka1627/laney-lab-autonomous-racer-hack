@@ -75,10 +75,20 @@ export function saveRun(run: Omit<TrainingRun, 'id' | 'timestamp'>): TrainingRun
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(runs));
   } catch {
-    // Storage full — trim oldest runs
-    const trimmed = runs.slice(-50);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed));
+    // Storage full — keep metadata but warn user
+    const trimmed = runs.slice(-50).map(r => ({ ...r, controlLog: [] }));
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed));
+      console.warn('Storage full: control logs trimmed from older runs. Export data regularly to avoid loss.');
+    } catch {
+      const minimal = runs.slice(-10).map(r => ({ ...r, controlLog: [] }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(minimal));
+    }
   }
+
+  // TODO: Replace localStorage with IndexedDB for larger storage capacity
+  // TODO: Implement API upload (POST /api/runs/{id}/upload) — once available,
+  //       uploaded runs should be cleared from local storage
 
   // Update accumulated stats
   const stats = getStats();

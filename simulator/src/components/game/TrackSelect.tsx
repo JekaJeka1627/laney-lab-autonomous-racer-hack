@@ -3,8 +3,10 @@
 import Link from 'next/link';
 import { useGameStore } from '@/lib/stores/game-store';
 import { TRACKS } from '@/lib/tracks/track-data';
+import { useState, useEffect } from 'react';
 import { getStats } from '@/lib/data/training-data';
 import { Play, Lock, Trophy, Zap, Bot, Info, Database, BarChart3 } from 'lucide-react';
+
 
 const difficultyColors: Record<string, string> = {
   beginner: 'text-green-400 bg-green-400/10 border-green-400/30',
@@ -19,8 +21,13 @@ const difficultyColors: Record<string, string> = {
 export function TrackSelect() {
   const setTrackId = useGameStore((s) => s.setTrackId);
   const setMode = useGameStore((s) => s.setMode);
-  const xp = useGameStore((s) => s.xp);
-  const lapCount = useGameStore((s) => s.lapCount);
+  const [totalLaps, setTotalLaps] = useState(0);
+  const [totalXp, setTotalXp] = useState(0);
+  useEffect(() => {
+    const stats = getStats()
+    setTotalLaps(stats.totalLaps);
+    setTotalXp(stats.totalLaps * 50);
+  }, []);
 
   function initTrack(trackId: string) {
     setTrackId(trackId);
@@ -66,12 +73,12 @@ export function TrackSelect() {
         <div className="flex items-center justify-center gap-6 text-sm">
           <div className="flex items-center gap-2 bg-white/5 rounded-full px-4 py-2">
             <Zap className="w-4 h-4 text-yellow-400" />
-            <span className="font-bold">{xp}</span>
+            <span className="font-bold">{totalXp}</span>
             <span className="text-gray-400">XP</span>
           </div>
           <div className="flex items-center gap-2 bg-white/5 rounded-full px-4 py-2">
             <Trophy className="w-4 h-4 text-yellow-400" />
-            <span className="font-bold">{lapCount}</span>
+            <span className="font-bold">{totalLaps}</span>
             <span className="text-gray-400">Total Laps</span>
           </div>
         </div>
@@ -80,7 +87,7 @@ export function TrackSelect() {
         <div className="grid gap-4">
           {TRACKS.map((track) => {
             const locked = track.unlockRequirement
-              ? lapCount < track.unlockRequirement.totalClassLaps
+              ? totalLaps < track.unlockRequirement.totalClassLaps
               : false;
 
             return (

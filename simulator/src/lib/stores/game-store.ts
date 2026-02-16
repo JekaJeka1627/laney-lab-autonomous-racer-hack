@@ -3,6 +3,7 @@
  * Manages car state, lap tracking, XP, and run data capture.
  */
 import { create } from 'zustand';
+import { getStats } from '@/lib/data/training-data';
 
 export interface CarState {
   x: number;
@@ -79,6 +80,17 @@ interface GameState {
   setElapsedMs: (ms: number) => void;
 }
 
+function loadSavedStats() {
+  if (typeof window === 'undefined') return { laps: 0, xp: 0 };
+  const stats = getStats();
+  return {
+    laps: stats.totalLaps,
+    xp: stats.totalLaps * 50, // base XP approximation
+  };
+}
+
+const saved = loadSavedStats();
+
 export const useGameStore = create<GameState>((set, get) => ({
   mode: 'menu',
   trackId: 'oval',
@@ -94,7 +106,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   setKey: (key, down) => set((s) => ({ keys: { ...s.keys, [key]: down } })),
 
   currentLapStart: 0,
-  lapCount: 0,
+  lapCount: saved.laps,
   laps: [],
   bestLapMs: null,
   completeLap: () => {
@@ -122,7 +134,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
   resetLaps: () => set({ lapCount: 0, laps: [], bestLapMs: null, currentLapStart: performance.now(), offTrackCount: 0 }),
 
-  xp: 0,
+  xp: saved.xp,
   addXp: (amount) => set((s) => ({ xp: s.xp + amount })),
 
   controlLog: [],
