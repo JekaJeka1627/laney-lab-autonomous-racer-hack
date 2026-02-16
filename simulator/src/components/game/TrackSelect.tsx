@@ -84,10 +84,12 @@ export function TrackSelect() {
               : false;
 
             return (
-              <button
+              <div
+                role="button"
+                tabIndex={0}
                 key={track.id}
                 onClick={() => !locked && startDriving(track.id)}
-                disabled={locked}
+                onKeyDown={(e) => { if (!locked && (e.key === 'Enter' || e.key === ' ')) startDriving(track.id); }}
                 className={[
                   'w-full text-left rounded-2xl border p-5 transition-all',
                   locked
@@ -126,7 +128,7 @@ export function TrackSelect() {
                     </div>
                   )}
                 </div>
-              </button>
+              </div>
             );
           })}
         </div>
