@@ -20,8 +20,12 @@ const difficultyColors: Record<string, string> = {
 export function TrackSelect() {
   const setTrackId = useGameStore((s) => s.setTrackId);
   const setMode = useGameStore((s) => s.setMode);
-  const xp = useGameStore((s) => s.xp);
-  const lapCount = useGameStore((s) => s.lapCount);
+
+  // Use persisted accumulated stats for unlock gating & header display
+  // (Zustand lapCount resets per-run; localStorage totalLaps persists across sessions)
+  const [persistedStats, setPersistedStats] = useState<AccumulatedStats | null>(null);
+  useEffect(() => { setPersistedStats(getStats()); }, []);
+  const totalLaps = persistedStats?.totalLaps ?? 0;
 
   function initTrack(trackId: string) {
     setTrackId(trackId);
@@ -67,12 +71,12 @@ export function TrackSelect() {
         <div className="flex items-center justify-center gap-6 text-sm">
           <div className="flex items-center gap-2 bg-white/5 rounded-full px-4 py-2">
             <Zap className="w-4 h-4 text-yellow-400" />
-            <span className="font-bold">{xp}</span>
-            <span className="text-gray-400">XP</span>
+            <span className="font-bold">{persistedStats?.totalFrames?.toLocaleString() ?? 0}</span>
+            <span className="text-gray-400">Frames</span>
           </div>
           <div className="flex items-center gap-2 bg-white/5 rounded-full px-4 py-2">
             <Trophy className="w-4 h-4 text-yellow-400" />
-            <span className="font-bold">{lapCount}</span>
+            <span className="font-bold">{totalLaps}</span>
             <span className="text-gray-400">Total Laps</span>
           </div>
         </div>
@@ -81,7 +85,7 @@ export function TrackSelect() {
         <div className="grid gap-4">
           {TRACKS.map((track) => {
             const locked = track.unlockRequirement
-              ? lapCount < track.unlockRequirement.totalClassLaps
+              ? totalLaps < track.unlockRequirement.totalClassLaps
               : false;
 
             return (
