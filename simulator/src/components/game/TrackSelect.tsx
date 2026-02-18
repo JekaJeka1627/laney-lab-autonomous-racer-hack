@@ -1,9 +1,10 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useGameStore } from '@/lib/stores/game-store';
 import { TRACKS } from '@/lib/tracks/track-data';
-import { getStats } from '@/lib/data/training-data';
+import { getStats, type AccumulatedStats } from '@/lib/data/training-data';
 import { Play, Lock, Trophy, Zap, Bot, Info, Database, BarChart3 } from 'lucide-react';
 
 const difficultyColors: Record<string, string> = {
@@ -84,10 +85,13 @@ export function TrackSelect() {
               : false;
 
             return (
-              <button
+              <div
                 key={track.id}
+                role="button"
+                tabIndex={locked ? -1 : 0}
                 onClick={() => !locked && startDriving(track.id)}
-                disabled={locked}
+                onKeyDown={(e) => { if (!locked && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); startDriving(track.id); } }}
+                aria-disabled={locked || undefined}
                 className={[
                   'w-full text-left rounded-2xl border p-5 transition-all',
                   locked
@@ -126,7 +130,7 @@ export function TrackSelect() {
                     </div>
                   )}
                 </div>
-              </button>
+              </div>
             );
           })}
         </div>
@@ -156,7 +160,12 @@ export function TrackSelect() {
 }
 
 function DataBar() {
-  const stats = typeof window !== 'undefined' ? getStats() : null;
+  const [stats, setStats] = useState<AccumulatedStats | null>(null);
+
+  useEffect(() => {
+    setStats(getStats());
+  }, []);
+
   if (!stats || stats.totalRuns === 0) return null;
 
   return (
