@@ -7,6 +7,7 @@ import { TRACKS } from '@/lib/tracks/track-data';
 import { getStats, type AccumulatedStats } from '@/lib/data/training-data';
 import { Play, Lock, Trophy, Zap, Bot, Info, Database, BarChart3 } from 'lucide-react';
 
+
 const difficultyColors: Record<string, string> = {
   beginner: 'text-green-400 bg-green-400/10 border-green-400/30',
   intermediate: 'text-yellow-400 bg-yellow-400/10 border-yellow-400/30',
