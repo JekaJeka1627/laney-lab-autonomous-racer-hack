@@ -212,7 +212,6 @@ export const TRACKS: TrackDef[] = [
     spawnRotation: computeSpawnRotation(-34, -18, classroomLabWaypoints),
     waypoints: classroomLabWaypoints,
     obstacles: classroomLabObstacles,
-    unlockRequirement: { totalClassLaps: 15 },
   },
   {
     id: 'classroom-lab-b',
@@ -225,7 +224,6 @@ export const TRACKS: TrackDef[] = [
     spawnRotation: computeSpawnRotation(-32, -20, classroomLabBWaypoints),
     waypoints: classroomLabBWaypoints,
     obstacles: classroomLabBObstacles,
-    unlockRequirement: { totalClassLaps: 18 },
   },
   {
     id: 'classroom-lab-c',
@@ -238,7 +236,6 @@ export const TRACKS: TrackDef[] = [
     spawnRotation: computeSpawnRotation(-30, -18, classroomLabCWaypoints),
     waypoints: classroomLabCWaypoints,
     obstacles: classroomLabCObstacles,
-    unlockRequirement: { totalClassLaps: 22 },
   },
 ];
 
