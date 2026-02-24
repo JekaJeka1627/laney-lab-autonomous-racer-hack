@@ -391,7 +391,6 @@ export default function DashboardPage() {
                     setCreatingJob(true);
                     try {
                       await createTrainingJob({
-                        dataset: { manual_only: true, max_runs: 200 },
                         hyperparams: { epochs: 3, batch_size: 32, learning_rate: 0.0003 },
                         export: { set_active: true },
                       });

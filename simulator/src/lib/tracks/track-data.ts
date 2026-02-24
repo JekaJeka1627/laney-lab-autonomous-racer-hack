@@ -180,7 +180,6 @@ export const TRACKS: TrackDef[] = [
     spawnPos: [0, 0.5, -40],
     spawnRotation: computeSpawnRotation(0, -40, sCurveWaypoints),
     waypoints: sCurveWaypoints,
-    unlockRequirement: { totalClassLaps: 10 },
   },
   {
     id: 'city-circuit',
@@ -199,7 +198,6 @@ export const TRACKS: TrackDef[] = [
       { x: 10, z: -30 }, { x: 0, z: -25 }, { x: -10, z: -30 },
       { x: -20, z: -28 },
     ],
-    unlockRequirement: { totalClassLaps: 30 },
   },
   {
     id: 'classroom-lab',
