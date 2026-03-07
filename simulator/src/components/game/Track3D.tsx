@@ -304,8 +304,8 @@ function OutdoorEnvironment({ obstacles }: { obstacles: TrackObstacle[] }) {
   return (
     <group>
       {/* Infield patch for visual contrast on large outdoor ovals */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.002, 0]} receiveShadow>
-        <ellipseGeometry args={[42, 22, 64]} />
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.002, 0]} scale={[1, 22 / 42, 1]} receiveShadow>
+        <circleGeometry args={[42, 64]} />
         <meshStandardMaterial color="#3f7f34" roughness={0.95} />
       </mesh>
 
