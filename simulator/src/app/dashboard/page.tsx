@@ -56,6 +56,9 @@ export default function DashboardPage() {
   const [showHelp, setShowHelp] = useState(() => {
     if (typeof window === 'undefined') return false;
     return localStorage.getItem('dashboard-help-dismissed') !== 'true';
+    /*clean up the logic into a single boolean expression. 
+    first section probably is needed to prevent undefined
+    second probably checks if the the item has been dismissed*/
   });
   const [localSyncEntries, setLocalSyncEntries] = useState<RunSyncEntry[]>([]);
   const exportRef = useRef<HTMLDivElement>(null);
@@ -76,6 +79,11 @@ export default function DashboardPage() {
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
 
+
+  /* async Function to fetch and set data for the state:
+  remoteSummary, RemoteModels, RemoteJobs, ActiveRemoteModel, and RemoteRuns
+  with data from the cloud
+  */
   async function refreshCloudData() {
     if (!isApiConfigured()) return;
     setRemoteLoading(true);
@@ -87,7 +95,7 @@ export default function DashboardPage() {
         fetchRemoteTrainingJobs(20),
         fetchActiveModelVersion(),
         listRemoteRuns(12),
-      ]);
+      ]);//awaits data from api pulled using list of functions imported from @/lib/api/api-client
       setRemoteSummary(summary);
       setRemoteModels(models);
       setRemoteJobs(jobs);
@@ -131,7 +139,7 @@ export default function DashboardPage() {
     URL.revokeObjectURL(url);
     setShowExportMenu(false);
   }
-
+  //delete runs
   function handleDeleteRuns(ids: string[]) {
     deleteRuns(ids);
     setRuns(getRuns());
