@@ -12,34 +12,8 @@ export interface TrackPointNode {
   id: string;
   x: number;
   z: number;
-  neighbors: string[]; // Stores the IDs of connected nodes (Edges)
-}
-
-export class TrackGraph {
-  public nodes: Map<string, TrackPointNode> = new Map();
-
-  // Add a new node to the graph
-  addNode(id: string, x: number, z: number): void {
-    if (!this.nodes.has(id)) {
-      this.nodes.set(id, { id, x, z, neighbors: [] });
-    }
-  }
-
-  // Create a directed edge from one node to another
-  addEdge(fromId: string, toId: string): void {
-    const fromNode = this.nodes.get(fromId);
-    const toNode = this.nodes.get(toId);
-
-    if (fromNode && toNode && !fromNode.neighbors.includes(toId)) {
-      fromNode.neighbors.push(toId);
-    }
-  }
-
-  // Create a bidirectional edge (useful for the straightaway)
-  addBidirectionalEdge(id1: string, id2: string): void {
-    this.addEdge(id1, id2);
-    this.addEdge(id2, id1);
-  }
+  width: number;
+  nextTrackPointIds: string[]; // Stores the IDs of connected nodes (Edges)
 }
 
 export interface TrackObstacle {
@@ -60,135 +34,61 @@ export interface TrackDef {
   width: number; // track half-width
   spawnPos: [number, number, number]; // x, y, z
   spawnRotation: number; // radians
-  waypoints: TrackPoint[] | TrackPointNode[];
+  waypoints: TrackPoint[];
+  waypointsGraph?: Record<string, TrackPointNode>;
   obstacles?: TrackObstacle[];
   unlockRequirement?: { totalClassLaps: number };
 }
 
-function ovalTrack(
+export function curveTrack(
+  prefix: string,
   cx: number,
-  cz: number,
+  cz: number, // Center X and Z
   rx: number,
-  rz: number,
-  n: number,
-): TrackPoint[] {
-  const pts: TrackPoint[] = [];
-  for (let i = 0; i < n; i++) {
-    const angle = (i / n) * Math.PI * 2;
-    pts.push({ x: cx + Math.cos(angle) * rx, z: cz + Math.sin(angle) * rz });
-  }
-  return pts;
-}
+  rz: number, // Radius X and Z
+  numPoints: number,
+  trackWidth: number,
+  isClosedLoop: boolean, // toggle: True for full ovals, False for semi-circles
+  startAngle: number = 0, // defaults to 0
+  endAngle: number = Math.PI * 2, // defaults 360 degrees
+): Record<string, TrackPointNode> {
+  const tracks: Record<string, TrackPointNode> = {};
 
-function buildConnectedOvalsGraph(
-  nodesPerOval: number,
-  straightNodes: number,
-): TrackGraph {
-  const graph = new TrackGraph();
+  // If it's a closed loop, divide by numPoints (so it doesn't overlap the start).
+  // If it's an open arc, divide by numPoints - 1 (so it lands perfectly on the end).
+  const divisor = isClosedLoop ? numPoints : numPoints - 1;
 
-  const leftCenter = { x: -40, z: 0 };
-  const rightCenter = { x: 40, z: 0 };
-  const ovalRadiusX = 20;
-  const ovalRadiusZ = 30;
+  for (let i = 0; i < numPoints; i++) {
+    const fraction = i / divisor;
+    const angle = startAngle + fraction * (endAngle - startAngle);
 
-  // Build Left Oval Nodes & Internal Edges
-  for (let i = 0; i < nodesPerOval; i++) {
-    const angle = (i / nodesPerOval) * Math.PI * 2;
-    const id = `L-${i}`;
-    graph.addNode(
-      id,
-      leftCenter.x + Math.cos(angle) * ovalRadiusX,
-      leftCenter.z + Math.sin(angle) * ovalRadiusZ,
-    );
+    const currentX = cx + Math.cos(angle) * rx;
+    const currentZ = cz + Math.sin(angle) * rz;
 
-    // Connect to the previous node to form the loop
-    if (i > 0) graph.addEdge(`L-${i - 1}`, id);
-  }
-  graph.addEdge(`L-${nodesPerOval - 1}`, "L-0"); // Close the left loop
+    const currentId = `${prefix}-${i}`;
+    const nextId = `${prefix}-${i + 1}`;
 
-  // Build Right Oval Nodes & Internal Edges
-  for (let i = 0; i < nodesPerOval; i++) {
-    const angle = (i / nodesPerOval) * Math.PI * 2;
-    const id = `R-${i}`;
-    graph.addNode(
-      id,
-      rightCenter.x + Math.cos(angle) * ovalRadiusX,
-      rightCenter.z + Math.sin(angle) * ovalRadiusZ,
-    );
+    const newNode: TrackPointNode = {
+      id: currentId,
+      x: currentX,
+      z: currentZ,
+      width: trackWidth,
+      nextTrackPointIds: [],
+    };
 
-    if (i > 0) graph.addEdge(`R-${i - 1}`, id);
-  }
-  graph.addEdge(`R-${nodesPerOval - 1}`, "R-0"); // Close the right loop
-
-  // Build Straightaway Nodes (Connecting the inner edges of both ovals)
-  const startX = graph.nodes.get("L-0")!.x;
-  const endX = graph.nodes.get("R-8")!.x;
-
-  for (let i = 0; i <= straightNodes; i++) {
-    const id = `S-${i}`;
-    const t = i / straightNodes;
-    const xPos = startX + t * (endX - startX);
-    graph.addNode(id, xPos, 0); // Z is 0 for a straight horizontal line
-
-    if (i > 0) graph.addBidirectionalEdge(`S-${i - 1}`, id);
-  }
-
-  // Hook the straightaway into the ovals
-  // Connect Left Oval to the start of the straightaway
-  graph.addBidirectionalEdge("L-0", "S-0");
-
-  // Connect Right Oval to the end of the straightaway
-  graph.addBidirectionalEdge("R-8", `S-${straightNodes}`);
-
-  return graph;
-}
-
-function extractPathFromGraph(
-  graph: TrackGraph,
-  routeIds: string[],
-): TrackPoint[] {
-  const path: TrackPoint[] = [];
-  for (const id of routeIds) {
-    const node = graph.nodes.get(id);
-    if (node) {
-      path.push({ x: node.x, z: node.z });
-    } else {
-      console.warn(`Node ${id} not found in graph!`);
+    if (i < numPoints - 1) {
+      // Connect to the next node normally
+      newNode.nextTrackPointIds.push(nextId);
+    } else if (isClosedLoop) {
+      // If it's the very last node, and it's a closed loop, point back to 0
+      newNode.nextTrackPointIds.push(`${prefix}-0`);
     }
-  }
-  return path;
-}
 
-function generateBarbellRoute(
-  nodesPerOval: number,
-  straightNodes: number,
-): string[] {
-  const route: string[] = [];
-  const halfOval = Math.floor(nodesPerOval / 2);
-
-  for (let i = halfOval; i < nodesPerOval; i++) {
-    route.push(`L-${i}`);
+    // (If it's the last node and not a closed loop, pointer stays empty)
+    tracks[currentId] = newNode;
   }
 
-  route.push("L-0");
-  for (let i = 1; i <= straightNodes; i++) {
-    route.push(`S-${i}`);
-  }
-
-  for (let i = 0; i <= nodesPerOval; i++) {
-    const nodeIndex = (halfOval + i) % nodesPerOval;
-    route.push(`R-${nodeIndex}`);
-  }
-
-  for (let i = straightNodes - 1; i >= 1; i--) {
-    route.push(`S-${i}`);
-  }
-
-  for (let i = 0; i < halfOval; i++) {
-    route.push(`L-${i}`);
-  }
-
-  return route;
+  return tracks;
 }
 
 function sCurveTrack(): TrackPoint[] {
@@ -204,6 +104,78 @@ function sCurveTrack(): TrackPoint[] {
   return pts;
 }
 
+export function straightawayTrack(
+  prefix: string,
+  startX: number,
+  startZ: number,
+  endX: number,
+  endZ: number,
+  numPoints: number,
+  trackWidth: number,
+): Record<string, TrackPointNode> {
+  const tracks: Record<string, TrackPointNode> = {};
+
+  for (let i = 0; i < numPoints; i++) {
+    // The Lerp math to evenly space the waypoints
+    const fraction = i / (numPoints - 1);
+    const currentX = startX + fraction * (endX - startX);
+    const currentZ = startZ + fraction * (endZ - startZ);
+
+    const currentId = `${prefix}-${i}`;
+    const nextId = `${prefix}-${i + 1}`;
+
+    const newNode: TrackPointNode = {
+      id: currentId,
+      x: currentX,
+      z: currentZ,
+      width: trackWidth,
+      nextTrackPointIds: [],
+    };
+
+    // Connect it to the next node in the straightaway
+    if (i < numPoints - 1) {
+      newNode.nextTrackPointIds.push(nextId);
+    }
+
+    tracks[currentId] = newNode;
+  }
+
+  return tracks;
+}
+
+function createStadiumTrack(): Record<string, TrackPointNode> {
+  // 1. Generate the 4 track pieces
+  const leftStraight = straightawayTrack("left", -20, -30, -20, 30, 10, 5);
+  const topCurve = curveTrack("top", 0, 30, 20, 20, 10, 5, false, Math.PI, 0);
+  const rightStraight = straightawayTrack("right", 20, 30, 20, -30, 10, 5);
+  const bottomCurve = curveTrack(
+    "bot",
+    0,
+    -30,
+    20,
+    20,
+    10,
+    5,
+    false,
+    Math.PI * 2,
+    Math.PI,
+  );
+
+  const stadiumGraph = {
+    ...leftStraight,
+    ...topCurve,
+    ...rightStraight,
+    ...bottomCurve,
+  };
+
+  stadiumGraph["left-9"].nextTrackPointIds.push("top-0");
+  stadiumGraph["top-9"].nextTrackPointIds.push("right-0");
+  stadiumGraph["right-9"].nextTrackPointIds.push("bot-0");
+  stadiumGraph["bot-9"].nextTrackPointIds.push("left-0");
+
+  return stadiumGraph;
+}
+
 /**
  * Compute the heading angle from the spawn point toward the nearest
  * next waypoint so the car faces along the track at start.
@@ -213,6 +185,11 @@ function computeSpawnRotation(
   spawnZ: number,
   waypoints: TrackPoint[],
 ): number {
+  // Check if the track is using the new Graph system (empty array)
+  if (waypoints.length === 0) {
+    return 0;
+  }
+
   // Find closest waypoint
   let closestIdx = 0;
   let closestDist = Infinity;
@@ -232,41 +209,89 @@ function computeSpawnRotation(
   return Math.atan2(dx, dz);
 }
 
-// Graph-specific version of the rotation logic.
-function computeSpawnRotationFromGraph(
-  spawnNodeId: string,
-  targetNodeId: string,
-  graph: TrackGraph,
+function computeSpawnRotationGraph(
+  spawnX: number,
+  spawnZ: number,
+  trackNodes: Record<string, TrackPointNode>,
 ): number {
-  const start = graph.nodes.get(spawnNodeId);
-  const target = graph.nodes.get(targetNodeId);
+  let closestNode: TrackPointNode | null = null;
+  let closestDist = Infinity;
 
-  if (!start || !target) return 0;
+  // Find closest waypoint by looping through the dictionary
+  for (const nodeId in trackNodes) {
+    const node = trackNodes[nodeId];
+    const dx = node.x - spawnX;
+    const dz = node.z - spawnZ;
+    const d = dx * dx + dz * dz;
 
-  const dx = target.x - start.x;
-  const dz = target.z - start.z;
+    if (d < closestDist) {
+      closestDist = d;
+      closestNode = node;
+    }
+  }
 
+  // If track is empty or node has no connections, default to 0
+  if (!closestNode || closestNode.nextTrackPointIds.length === 0) {
+    return 0;
+  }
+
+  // Find the next node using the ID in nextTrackPointIds
+  const nextNodeId = closestNode.nextTrackPointIds[0];
+  const nextNode = trackNodes[nextNodeId];
+
+  if (!nextNode) return 0; // Check in case of a broken link
+
+  const dx = nextNode.x - spawnX;
+  const dz = nextNode.z - spawnZ;
   return Math.atan2(dx, dz);
 }
 
-const OVAL_RESOLUTION = 16;
-const STRAIGHT_RESOLUTION = 5;
+// Helper function
+function graphToArray(
+  graph: Record<string, TrackPointNode>,
+  startId?: string,
+): TrackPoint[] {
+  const cleanPath: TrackPoint[] = [];
+  const visited = new Set<string>();
 
-const myEnvironmentGraph = buildConnectedOvalsGraph(
-  OVAL_RESOLUTION,
-  STRAIGHT_RESOLUTION,
-);
+  let currentId = startId || Object.keys(graph)[0];
 
-const barbellRoute = generateBarbellRoute(OVAL_RESOLUTION, STRAIGHT_RESOLUTION);
+  while (currentId && !visited.has(currentId)) {
+    const node = graph[currentId];
+    if (!node) break;
 
-const ovalWaypointsGraph = extractPathFromGraph(
-  myEnvironmentGraph,
-  barbellRoute,
-);
+    visited.add(currentId);
 
-const startNode = myEnvironmentGraph.nodes.get(barbellRoute[0])!;
+    const prevNode = cleanPath[cleanPath.length - 1];
+    if (
+      !prevNode ||
+      Math.abs(node.x - prevNode.x) > 0.1 ||
+      Math.abs(node.z - prevNode.z) > 0.1
+    ) {
+      cleanPath.push({ x: node.x, z: node.z });
+    }
 
-const nascarRacingWaypoints = ovalTrack(0, 0, 62, 38, 96);
+    currentId = node.nextTrackPointIds[0];
+  }
+
+  if (cleanPath.length > 1) {
+    const firstNode = cleanPath[0];
+    const lastNode = cleanPath[cleanPath.length - 1];
+
+    if (
+      Math.abs(firstNode.x - lastNode.x) < 0.1 &&
+      Math.abs(firstNode.z - lastNode.z) < 0.1
+    ) {
+      cleanPath.pop();
+    }
+  }
+
+  return cleanPath;
+}
+
+const ovalWaypoints = curveTrack("oval", 0, 0, 30, 20, 64, 5, true);
+const nascarRacingWaypoints = curveTrack("oval", 0, 0, 62, 38, 96, 7.5, true);
+const stadiumWaypoints = createStadiumTrack();
 const sCurveWaypoints = sCurveTrack();
 const cityWaypoints: TrackPoint[] = [
   { x: -25, z: -25 },
@@ -457,8 +482,9 @@ export const TRACKS: TrackDef[] = [
     description: "Simple loop — learn the controls",
     width: 5,
     spawnPos: [30, 0.5, 0],
-    spawnRotation: computeSpawnRotation(30, 0, ovalWaypointsGraph),
-    waypoints: ovalWaypointsGraph,
+    spawnRotation: computeSpawnRotationGraph(30, 0, ovalWaypoints),
+    waypoints: graphToArray(ovalWaypoints),
+    waypointsGraph: ovalWaypoints,
   },
   {
     id: "nascar-racing-track",
@@ -469,23 +495,21 @@ export const TRACKS: TrackDef[] = [
     environment: "outdoor",
     width: 7.5,
     spawnPos: [62, 0.5, 0],
-    spawnRotation: computeSpawnRotation(62, 0, nascarRacingWaypoints),
-    waypoints: nascarRacingWaypoints,
+    spawnRotation: computeSpawnRotationGraph(62, 0, nascarRacingWaypoints),
+    waypoints: graphToArray(nascarRacingWaypoints),
+    waypointsGraph: nascarRacingWaypoints,
     obstacles: nascarRacingObstacles,
   },
   {
-    id: "double-oval-w-straightaway-graph",
-    name: "Barbell Track",
-    difficulty: "intermediate",
-    description: "A procedural track built from a waypoint graph.",
-    width: 5.0,
-    spawnPos: [startNode.x, 0.5, startNode.z],
-    spawnRotation: computeSpawnRotationFromGraph(
-      barbellRoute[0],
-      barbellRoute[1],
-      myEnvironmentGraph,
-    ),
-    waypoints: ovalWaypointsGraph,
+    id: "stadium",
+    name: "Stadium",
+    difficulty: "beginner",
+    description: "A continuous loop made of straightaways and semicircles",
+    width: 5,
+    spawnPos: [20, 0.5, 30],
+    spawnRotation: computeSpawnRotationGraph(20, 30, stadiumWaypoints),
+    waypoints: graphToArray(stadiumWaypoints, "right-0"),
+    waypointsGraph: stadiumWaypoints,
   },
   {
     id: "s-curves",
