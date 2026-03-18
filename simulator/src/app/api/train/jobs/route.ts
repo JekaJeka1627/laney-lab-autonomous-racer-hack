@@ -3,6 +3,11 @@ import { listTrainingJobs, startTrainingJob } from '@/lib/server/shared-data-sto
 
 export const runtime = 'nodejs';
 
+function allowLocalPlaceholderTraining(): boolean {
+  const raw = process.env.SIMULATOR_ALLOW_LOCAL_PLACEHOLDER_TRAINING?.trim().toLowerCase();
+  return raw === '1' || raw === 'true' || raw === 'yes';
+}
+
 export async function GET(req: NextRequest) {
   const limitRaw = req.nextUrl.searchParams.get('limit');
   const limit = limitRaw ? Number(limitRaw) : 20;
@@ -12,6 +17,15 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: Request) {
+  if (!allowLocalPlaceholderTraining()) {
+    return NextResponse.json(
+      {
+        error: 'Local placeholder training is disabled. Configure NEXT_PUBLIC_API_URL for the shared trainer, or set SIMULATOR_ALLOW_LOCAL_PLACEHOLDER_TRAINING=true for local scaffold mode.',
+      },
+      { status: 503 },
+    );
+  }
+
   let payload: unknown;
   try {
     payload = await req.json();
