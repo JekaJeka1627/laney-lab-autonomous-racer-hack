@@ -103,6 +103,7 @@ class ExplorerRuntime:
             "usb_camera": self._usb_cam_available,
             "stereo_depth": self._usb_cam_available,
             "map": self.world_map.stats,
+            "map_time": self.world_map.last_update_time,
             "behavior": self.planner.active_behavior,
             "steering": round(self._last_action.steering, 2),
             "throttle": round(self._last_action.throttle, 2),

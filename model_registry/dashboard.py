@@ -4,13 +4,15 @@ Model Registry Dashboard -- Streamlit UI for browsing, switching, and comparing 
 Run:
     streamlit run model_registry/dashboard.py
 """
-from __future__ import annotations
-
-import json
-import sys
+from __future__ import json
+import logging
+import math
+import os
+import random
+import time
 import urllib.request
+from datetime import datetime
 from pathlib import Path
-
 import streamlit as st
 
 # Ensure model_registry is importable
@@ -706,6 +708,9 @@ with tab_explorer:
                 "Dark gray = unexplored, white = free space, "
                 "red = obstacle, blue dot = car"
             )
+            # Real-time map image with refresh controls
+            auto_refresh = st.checkbox("Auto-refresh map (2s)", value=True, key="map_auto_refresh")
+            
             # Fetch the rendered map image from the runtime
             try:
                 req = urllib.request.Request(
@@ -716,7 +721,12 @@ with tab_explorer:
                     from PIL import Image
                     img_data = resp.read()
                     img = Image.open(io.BytesIO(img_data))
-                    st.image(img, caption="Occupancy Map", use_container_width=True)
+                    st.image(img, caption="Occupancy Map (live)", use_container_width=True)
+                    
+                    # Show last update time
+                    map_time = explorer_status.get("map_time", "")
+                    if map_time:
+                        st.caption(f"Last updated: {map_time}")
             except Exception:
                 st.caption("Map image requires active runtime connection.")
 
@@ -740,12 +750,44 @@ with tab_explorer:
             "the car will prioritize unexplored areas (frontiers) and "
             "navigate confidently through known free space."
         )
+        
+        # Map download button
+        col1, col2 = st.columns([1, 3])
+        with col1:
+            if st.button("💾 Save Map", use_container_width=True):
+                try:
+                    req = urllib.request.Request(
+                        f"{VEHICLE_RUNTIME_URL}/explorer/map-save",
+                        method="POST"
+                    )
+                    with urllib.request.urlopen(req, timeout=5) as resp:
+                        result = json.loads(resp.read().decode())
+                        if result.get("success"):
+                            st.success("Map saved to explorer_state/")
+                        else:
+                            st.error("Save failed")
+                except Exception:
+                    st.error("Failed to save map")
+        
+        with col2:
+            st.caption("Map saves automatically when exploration stops, but you can also save manually.")
+        
+        # Auto-refresh logic
+        if auto_refresh and explorer_status and explorer_status.get("mode") == "exploring":
+            time.sleep(2)  # Wait 2 seconds before refresh
+            st.rerun()
     else:
         st.info(
             "No map data yet. Start an exploration mission to build "
             "a map of the environment. The map saves between runs -- "
             "future explorations will be faster and smarter."
         )
+        
+        # Still auto-refresh when no map but explorer is running
+        if explorer_status and explorer_status.get("mode") == "exploring":
+            if st.checkbox("Auto-refresh while exploring", value=True, key="no_map_refresh"):
+                time.sleep(2)
+                st.rerun()
 
 # ---------------------------------------------------------------------------
 # Tab: Switch History

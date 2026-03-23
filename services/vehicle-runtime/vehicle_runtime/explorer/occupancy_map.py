@@ -80,6 +80,7 @@ class OccupancyMap:
         )
         self._total_cells = self._grid_size * self._grid_size
         self._updates = 0
+        self._last_update_time = ""
 
     # -- Coordinate conversion -----------------------------------------------
 
@@ -178,6 +179,11 @@ class OccupancyMap:
                 orow, ocol = self._world_to_grid(ox, oy)
                 if self._in_bounds(orow, ocol):
                     self._grid[orow, ocol] = OCCUPIED
+        
+        # Update timestamp for real-time dashboard
+        from datetime import datetime
+        self._last_update_time = datetime.now().strftime("%H:%M:%S")
+        self._updates += 1
 
     # -- Navigation queries --------------------------------------------------
 
@@ -302,6 +308,11 @@ class OccupancyMap:
         cv2.circle(img, (car_col, car_row), 3, (60, 120, 255), -1)
 
         return img
+
+    @property
+    def last_update_time(self) -> str:
+        """Return the timestamp of the last map update (HH:MM:SS format)."""
+        return self._last_update_time
 
     def to_cropped_image(
         self, car_x: float = 0, car_y: float = 0, radius_cells: int = 100

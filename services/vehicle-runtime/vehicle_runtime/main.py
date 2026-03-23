@@ -3,6 +3,8 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.responses import Response, StreamingResponse
+import json
 
 from vehicle_runtime.config import load_config
 from vehicle_runtime.runtime import VehicleRuntime
@@ -133,3 +135,178 @@ def session_stop(upload: bool = False) -> SessionStopResponse:
 def session_upload_latest() -> ActionResponse:
     uploaded = app.state.runtime.upload_latest_session()
     return ActionResponse(ok=True, message="latest session uploaded" if uploaded else "no session artifacts to upload")
+
+
+# ---------------------------------------------------------------------------
+# Explorer API endpoints
+# ---------------------------------------------------------------------------
+
+@app.get("/explorer/status")
+def explorer_status():
+    """Get explorer runtime status including map statistics."""
+    if not hasattr(app.state.runtime, "explorer") or not app.state.runtime.explorer:
+        return {"error": "Explorer not initialized"}
+    return app.state.runtime.explorer.status_dict
+
+
+@app.post("/explorer/start")
+def explorer_start():
+    """Start the explorer."""
+    if not hasattr(app.state.runtime, "explorer") or not app.state.runtime.explorer:
+        return {"error": "Explorer not initialized"}
+    try:
+        success = app.state.runtime.explorer.start()
+        return {"success": success}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/explorer/stop")
+def explorer_stop():
+    """Stop the explorer."""
+    if not hasattr(app.state.runtime, "explorer") or not app.state.runtime.explorer:
+        return {"error": "Explorer not initialized"}
+    try:
+        app.state.runtime.explorer.stop()
+        return {"success": True}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/explorer/mission/explore")
+def explorer_mission_explore(distance_ft: float = 50.0):
+    """Start an exploration mission."""
+    if not hasattr(app.state.runtime, "explorer") or not app.state.runtime.explorer:
+        return {"error": "Explorer not initialized"}
+    try:
+        app.state.runtime.explorer.set_distance_limit(distance_ft)
+        success = app.state.runtime.explorer.start()
+        return {"success": success, "distance_ft": distance_ft}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/explorer/mission/return")
+def explorer_mission_return():
+    """Start return-to-home mission."""
+    if not hasattr(app.state.runtime, "explorer") or not app.state.runtime.explorer:
+        return {"error": "Explorer not initialized"}
+    try:
+        app.state.runtime.explorer.start_return_home()
+        return {"success": True}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/explorer/settings")
+def explorer_settings(settings: dict):
+    """Update explorer settings."""
+    if not hasattr(app.state.runtime, "explorer") or not app.state.runtime.explorer:
+        return {"error": "Explorer not initialized"}
+    try:
+        # Apply settings to config
+        if "explore_throttle" in settings:
+            app.state.runtime.explorer.config.explore_throttle = settings["explore_throttle"]
+        if "breadcrumb_interval_frames" in settings:
+            app.state.runtime.explorer.config.breadcrumb_interval_frames = settings["breadcrumb_interval_frames"]
+        if "max_explore_distance_ft" in settings:
+            app.state.runtime.explorer.config.max_explore_distance_ft = settings["max_explore_distance_ft"]
+        if "max_explore_seconds" in settings:
+            app.state.runtime.explorer.config.max_explore_seconds = settings["max_explore_seconds"]
+        return {"success": True}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/explorer/behavior")
+def explorer_set_behavior(payload: dict):
+    """Switch driving behavior."""
+    if not hasattr(app.state.runtime, "explorer") or not app.state.runtime.explorer:
+        return {"error": "Explorer not initialized"}
+    try:
+        behavior_id = payload.get("behavior_id", "reactive")
+        kwargs = {k: v for k, v in payload.items() if k != "behavior_id"}
+        new_behavior = app.state.runtime.explorer.set_behavior(behavior_id, **kwargs)
+        return {"success": True, "active_behavior": new_behavior}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/explorer/behaviors")
+def explorer_list_behaviors():
+    """List available driving behaviors."""
+    if not hasattr(app.state.runtime, "explorer") or not app.state.runtime.explorer:
+        return {"error": "Explorer not initialized"}
+    try:
+        behaviors = app.state.runtime.explorer.get_available_behaviors()
+        return {"behaviors": behaviors}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/explorer/map-image")
+def explorer_map_image():
+    """Get the current occupancy map as PNG."""
+    if not hasattr(app.state.runtime, "explorer") or not app.state.runtime.explorer:
+        return Response(content=b"", media_type="image/png")
+    try:
+        import cv2
+        import io
+        from PIL import Image
+        
+        # Get rendered map from the explorer
+        img = app.state.runtime.explorer.world_map.to_image(
+            app.state.runtime.explorer.odometry.x,
+            app.state.runtime.explorer.odometry.y
+        )
+        
+        # Convert to PNG
+        pil_img = Image.fromarray(img)
+        buf = io.BytesIO()
+        pil_img.save(buf, format="PNG")
+        buf.seek(0)
+        
+        return StreamingResponse(buf, media_type="image/png")
+    except Exception:
+        return Response(content=b"", media_type="image/png")
+
+
+@app.get("/explorer/trail")
+def explorer_trail():
+    """Get the breadcrumb trail data."""
+    if not hasattr(app.state.runtime, "explorer") or not app.state.runtime.explorer:
+        return {"crumbs": []}
+    try:
+        trail_data = app.state.runtime.explorer.trail.to_dict()
+        return trail_data
+    except Exception:
+        return {"crumbs": []}
+
+
+@app.post("/explorer/map-save")
+def explorer_map_save():
+    """Manually save the map and trail."""
+    if not hasattr(app.state.runtime, "explorer") or not app.state.runtime.explorer:
+        return {"success": False, "error": "Explorer not initialized"}
+    try:
+        from pathlib import Path
+        save_dir = Path("explorer_state")
+        app.state.runtime.explorer.save_state(save_dir)
+        return {"success": True}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@app.get("/explorer/backend")
+def explorer_backend_info():
+    """Get information about inference backends in use."""
+    if not hasattr(app.state.runtime, "explorer") or not app.state.runtime.explorer:
+        return {"depth_backend": "unknown", "behavior_backend": "unknown"}
+    try:
+        info = {
+            "depth_backend": getattr(app.state.runtime.explorer.obstacle_detector, "backend", "unknown"),
+            "behavior_backend": getattr(app.state.runtime.explorer.planner._behavior, "_backend", "unknown"),
+        }
+        return info
+    except Exception:
+        return {"depth_backend": "unknown", "behavior_backend": "unknown"}
