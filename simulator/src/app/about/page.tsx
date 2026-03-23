@@ -51,6 +51,7 @@ const statusLabels = {
   planned: 'PLANNED',
 };
 
+/**about page */
 export default function AboutPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#0f0f23] to-[#1a1a2e] text-white">
@@ -284,6 +285,8 @@ export default function AboutPage() {
   );
 }
 
+
+/** This function generates the stats fragment*/
 function ClassStats() {
   const [totals] = useState(() => {
     try {
