@@ -3,6 +3,16 @@ uvicorn[standard]==0.32.1
 requests==2.32.3
 numpy==2.1.3
 Pillow==11.0.0
+# OpenVINO is the preferred inference backend for the DeepRacer's Intel Atom CPU.
+# It provides 2-3x faster model inference than onnxruntime by using Intel-specific
+# optimizations: MKL-DNN kernels, graph-level layer fusion (Conv+BN+ReLU merged
+# into single ops), cache-friendly memory layouts, and vectorized SIMD instructions.
+# This is critical for real-time obstacle detection (MiDaS depth) and trained
+# steering models running at 10+ FPS on the low-power Atom processor.
+# OpenVINO reads .onnx files directly -- no model conversion step needed.
+openvino==2024.5.0
+# onnxruntime is kept as a fallback for non-Intel hardware (e.g. dev laptops
+# with AMD/ARM CPUs).  On Intel hardware, OpenVINO is automatically preferred.
 onnxruntime==1.20.1
 opencv-python-headless==4.10.0.84
 pyserial==3.5

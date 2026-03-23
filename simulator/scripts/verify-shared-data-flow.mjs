@@ -71,12 +71,12 @@ async function submitRun(userId, lapCount) {
 }
 
 async function main() {
-  const before = await getJson('/api/stats');
+  const before = await getJson('/api/runs/summary');
 
   const runA = await submitRun(`verify-a-${Date.now()}`, 1);
   const runB = await submitRun(`verify-b-${Date.now()}`, 2);
 
-  const after = await getJson('/api/stats');
+  const after = await getJson('/api/runs/summary');
   assert(after.completed_runs >= before.completed_runs + 2, 'Global completed_runs did not increase by at least 2');
   assert(after.completed_laps >= before.completed_laps + 3, 'Global completed_laps did not increase by at least 3');
 

@@ -1,0 +1,39 @@
+{
+  "models": [
+    {
+      "id": "drfc-ppo",
+      "display_name": "DeepRacer-for-Cloud Clipped PPO",
+      "source_type": "external",
+      "source_notes": "Trained via deepracer-for-cloud. Archive contains model_49.pb (TF protobuf) + model_metadata.json. 5 discrete actions (steering -30/-15/0/15/30 at speed 0.6). Network: DEEP_CONVOLUTIONAL_NETWORK_SHALLOW. Algo: clipped_ppo.",
+      "local_path": "models/external/drfc-clipped-ppo/",
+      "remote_path": "",
+      "format": "tensorflow-pb",
+      "version": "1",
+      "date_added": "2026-03-22T22:03:06+00:00",
+      "trained_for": "simulated track",
+      "author": "",
+      "team": "",
+      "status": "ready",
+      "notes": "Model binary (model_49.pb) not committed to git -- place the .gz contents in models/external/drfc-clipped-ppo/",
+      "tags": []
+    },
+    {
+      "id": "center-align",
+      "display_name": "CenterAlign Continuous PPO",
+      "source_type": "external",
+      "source_notes": "Continuous action space model. Steering -30 to 30, speed 1.25 to 2.8. Greyscale preprocessing. Network: DEEP_CONVOLUTIONAL_NETWORK_SHALLOW. Algo: clipped_ppo.",
+      "local_path": "models/external/center-align-continuous/",
+      "remote_path": "",
+      "format": "tensorflow-pb",
+      "version": "1",
+      "date_added": "2026-03-22T22:13:29+00:00",
+      "trained_for": "center-line alignment",
+      "author": "",
+      "team": "",
+      "status": "ready",
+      "notes": "Key differences from drfc-ppo: continuous action space (not discrete), greyscale preprocess, higher speed range (1.25-2.8 vs 0.6). Archive: CenterAlignModel-model.tar.gz",
+      "tags": []
+    }
+  ],
+  "updated_at": "2026-03-22T22:13:29+00:00"
+}

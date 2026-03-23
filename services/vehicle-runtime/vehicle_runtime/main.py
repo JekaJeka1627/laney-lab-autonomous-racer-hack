@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, UploadFile
+from fastapi.responses import Response, StreamingResponse
+import json
+import cv2
+import numpy as np
 
 from vehicle_runtime.config import load_config
 from vehicle_runtime.runtime import VehicleRuntime
@@ -133,3 +137,401 @@ def session_stop(upload: bool = False) -> SessionStopResponse:
 def session_upload_latest() -> ActionResponse:
     uploaded = app.state.runtime.upload_latest_session()
     return ActionResponse(ok=True, message="latest session uploaded" if uploaded else "no session artifacts to upload")
+
+
+# ---------------------------------------------------------------------------
+# Explorer API endpoints
+# ---------------------------------------------------------------------------
+
+@app.get("/explorer/status")
+def explorer_status():
+    """Get explorer runtime status including map statistics."""
+    if not hasattr(app.state.runtime, "explorer") or not app.state.runtime.explorer:
+        return {"error": "Explorer not initialized"}
+    return app.state.runtime.explorer.status_dict
+
+
+@app.post("/explorer/start")
+def explorer_start():
+    """Start the explorer."""
+    if not hasattr(app.state.runtime, "explorer") or not app.state.runtime.explorer:
+        return {"error": "Explorer not initialized"}
+    try:
+        success = app.state.runtime.explorer.start()
+        return {"success": success}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/explorer/stop")
+def explorer_stop():
+    """Stop the explorer."""
+    if not hasattr(app.state.runtime, "explorer") or not app.state.runtime.explorer:
+        return {"error": "Explorer not initialized"}
+    try:
+        app.state.runtime.explorer.stop()
+        return {"success": True}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/explorer/mission/explore")
+def explorer_mission_explore(distance_ft: float = 50.0):
+    """Start an exploration mission."""
+    if not hasattr(app.state.runtime, "explorer") or not app.state.runtime.explorer:
+        return {"error": "Explorer not initialized"}
+    try:
+        app.state.runtime.explorer.set_distance_limit(distance_ft)
+        success = app.state.runtime.explorer.start()
+        return {"success": success, "distance_ft": distance_ft}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/explorer/mission/return")
+def explorer_mission_return():
+    """Start return-to-home mission."""
+    if not hasattr(app.state.runtime, "explorer") or not app.state.runtime.explorer:
+        return {"error": "Explorer not initialized"}
+    try:
+        app.state.runtime.explorer.start_return_home()
+        return {"success": True}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/explorer/settings")
+def explorer_settings(settings: dict):
+    """Update explorer settings."""
+    if not hasattr(app.state.runtime, "explorer") or not app.state.runtime.explorer:
+        return {"error": "Explorer not initialized"}
+    try:
+        # Apply settings to config
+        if "explore_throttle" in settings:
+            app.state.runtime.explorer.config.explore_throttle = settings["explore_throttle"]
+        if "breadcrumb_interval_frames" in settings:
+            app.state.runtime.explorer.config.breadcrumb_interval_frames = settings["breadcrumb_interval_frames"]
+        if "max_explore_distance_ft" in settings:
+            app.state.runtime.explorer.config.max_explore_distance_ft = settings["max_explore_distance_ft"]
+        if "max_explore_seconds" in settings:
+            app.state.runtime.explorer.config.max_explore_seconds = settings["max_explore_seconds"]
+        return {"success": True}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/explorer/behavior")
+def explorer_set_behavior(payload: dict):
+    """Switch driving behavior."""
+    if not hasattr(app.state.runtime, "explorer") or not app.state.runtime.explorer:
+        return {"error": "Explorer not initialized"}
+    try:
+        behavior_id = payload.get("behavior_id", "reactive")
+        kwargs = {k: v for k, v in payload.items() if k != "behavior_id"}
+        new_behavior = app.state.runtime.explorer.set_behavior(behavior_id, **kwargs)
+        return {"success": True, "active_behavior": new_behavior}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/explorer/behaviors")
+def explorer_list_behaviors():
+    """List available driving behaviors."""
+    if not hasattr(app.state.runtime, "explorer") or not app.state.runtime.explorer:
+        return {"error": "Explorer not initialized"}
+    try:
+        behaviors = app.state.runtime.explorer.get_available_behaviors()
+        return {"behaviors": behaviors}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/explorer/map-image")
+def explorer_map_image():
+    """Get the current occupancy map as PNG."""
+    if not hasattr(app.state.runtime, "explorer") or not app.state.runtime.explorer:
+        return Response(content=b"", media_type="image/png")
+    try:
+        import cv2
+        import io
+        from PIL import Image
+        
+        # Get rendered map from the explorer
+        img = app.state.runtime.explorer.world_map.to_image(
+            app.state.runtime.explorer.odometry.x,
+            app.state.runtime.explorer.odometry.y
+        )
+        
+        # Convert to PNG
+        pil_img = Image.fromarray(img)
+        buf = io.BytesIO()
+        pil_img.save(buf, format="PNG")
+        buf.seek(0)
+        
+        return StreamingResponse(buf, media_type="image/png")
+    except Exception:
+        return Response(content=b"", media_type="image/png")
+
+
+@app.get("/explorer/trail")
+def explorer_trail():
+    """Get the breadcrumb trail data."""
+    if not hasattr(app.state.runtime, "explorer") or not app.state.runtime.explorer:
+        return {"crumbs": []}
+    try:
+        trail_data = app.state.runtime.explorer.trail.to_dict()
+        return trail_data
+    except Exception:
+        return {"crumbs": []}
+
+
+@app.post("/explorer/map-save")
+def explorer_map_save():
+    """Manually save the map and trail."""
+    if not hasattr(app.state.runtime, "explorer") or not app.state.runtime.explorer:
+        return {"success": False, "error": "Explorer not initialized"}
+    try:
+        from pathlib import Path
+        save_dir = Path("explorer_state")
+        app.state.runtime.explorer.save_state(save_dir)
+        return {"success": True}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@app.get("/explorer/backend")
+def explorer_backend_info():
+    """Get information about inference backends in use."""
+    if not hasattr(app.state.runtime, "explorer") or not app.state.runtime.explorer:
+        return {"depth_backend": "unknown", "behavior_backend": "unknown"}
+    try:
+        info = {
+            "depth_backend": getattr(app.state.runtime.explorer.obstacle_detector, "backend", "unknown"),
+            "behavior_backend": getattr(app.state.runtime.explorer.planner._behavior, "_backend", "unknown"),
+        }
+        return info
+    except Exception:
+        return {"depth_backend": "unknown", "behavior_backend": "unknown"}
+
+
+@app.get("/explorer/reexplore")
+def explorer_reexplore_areas(max_results: int = 10):
+    """Get areas that need re-exploration due to low confidence."""
+    if not hasattr(app.state.runtime, "explorer") or not app.state.runtime.explorer:
+        return {"areas": []}
+    try:
+        areas = app.state.runtime.explorer.world_map.get_low_confidence_areas(max_results)
+        return {"areas": [{"x": x, "y": y, "confidence": conf} for x, y, conf in areas]}
+    except Exception:
+        return {"areas": []}
+
+
+# ---------------------------------------------------------------------------
+# Pre-mapping API endpoints
+# ---------------------------------------------------------------------------
+
+@app.post("/explorer/premap/photo")
+def explorer_premap_add_photo(file: UploadFile, position_x: float = 0.0, position_y: float = 0.0, heading: float = 0.0):
+    """Upload a photo for pre-mapping."""
+    if not hasattr(app.state.runtime, "explorer") or not app.state.runtime.explorer:
+        return {"error": "Explorer not initialized"}
+    
+    try:
+        from .explorer.premapper import Premapper
+        from pathlib import Path
+        
+        # Create premap workspace
+        premap_dir = Path("explorer_state/premap")
+        premap_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Save uploaded photo
+        photo_path = premap_dir / file.filename
+        with open(photo_path, "wb") as f:
+            content = file.file.read()
+            f.write(content)
+        
+        # Initialize premapper if needed
+        if not hasattr(app.state.runtime.explorer, "premapper"):
+            app.state.runtime.explorer.premapper = Premapper(premap_dir)
+        
+        # Add photo to premapper
+        photo_id = app.state.runtime.explorer.premapper.add_photo(
+            photo_path, (position_x, position_y), heading
+        )
+        
+        return {"success": True, "photo_id": photo_id}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/explorer/premap/annotate")
+def explorer_premap_annotate(photo_id: str, x: float, y: float, label: str, 
+                            confidence: float = 1.0, notes: str = ""):
+    """Add annotation to a pre-mapping photo."""
+    if not hasattr(app.state.runtime, "explorer") or not app.state.runtime.explorer:
+        return {"error": "Explorer not initialized"}
+    
+    try:
+        if not hasattr(app.state.runtime.explorer, "premapper"):
+            return {"error": "No pre-mapping session active"}
+        
+        success = app.state.runtime.explorer.premapper.annotate_photo(
+            photo_id, x, y, label, confidence, notes
+        )
+        
+        return {"success": success}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/explorer/premap/stitch")
+def explorer_premap_stitch():
+    """Stitch uploaded photos into a composite map."""
+    if not hasattr(app.state.runtime, "explorer") or not app.state.runtime.explorer:
+        return {"error": "Explorer not initialized"}
+    
+    try:
+        if not hasattr(app.state.runtime.explorer, "premapper"):
+            return {"error": "No pre-mapping session active"}
+        
+        panorama = app.state.runtime.explorer.premapper.stitch_photos()
+        
+        if panorama.size > 0:
+            return {"success": True, "message": f"Stitched {len(app.state.runtime.explorer.premapper.photos)} photos"}
+        else:
+            return {"success": False, "error": "Stitching failed"}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/explorer/premap/prior")
+def explorer_premap_create_prior():
+    """Create prior occupancy map from photo annotations."""
+    if not hasattr(app.state.runtime, "explorer") or not app.state.runtime.explorer:
+        return {"error": "Explorer not initialized"}
+    
+    try:
+        if not hasattr(app.state.runtime.explorer, "premapper"):
+            return {"error": "No pre-mapping session active"}
+        
+        prior = app.state.runtime.explorer.premapper.create_prior_occupancy()
+        
+        # Apply prior to the main occupancy map
+        if hasattr(app.state.runtime.explorer, "world_map"):
+            # Convert prior to binary occupancy using threshold
+            binary_prior = (prior > 0.7).astype(np.uint8) * 2  # 2 = OCCUPIED
+            binary_prior[prior < 0.3] = 1  # 1 = FREE
+            
+            # Blend with existing map (prior has influence but doesn't overwrite)
+            current = app.state.runtime.explorer.world_map._grid
+            # Keep UNKNOWN where prior is uncertain
+            mask = (prior >= 0.3) & (prior <= 0.7)
+            current[mask] = binary_prior[mask]
+            
+            # Update confidence based on prior strength
+            confidence_boost = np.abs(prior - 0.5) * 2  # 0 to 1
+            app.state.runtime.explorer.world_map._confidence = np.minimum(
+                255, app.state.runtime.explorer.world_map._confidence + confidence_boost * 50
+            )
+        
+        return {"success": True, "message": "Prior map created and applied"}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/explorer/premap/status")
+def explorer_premap_status():
+    """Get current pre-mapping status."""
+    if not hasattr(app.state.runtime, "explorer") or not app.state.runtime.explorer:
+        return {"error": "Explorer not initialized"}
+    
+    try:
+        if not hasattr(app.state.runtime.explorer, "premapper"):
+            return {"has_premap": False, "photos": []}
+        
+        premapper = app.state.runtime.explorer.premapper
+        hints = premapper.get_exploration_hints()
+        
+        return {
+            "has_premap": True,
+            "num_photos": len(premapper.photos),
+            "has_composite": premapper.composite_map is not None,
+            "has_prior": premapper.prior_occupancy is not None,
+            "photos": [
+                {
+                    "id": p.id,
+                    "filename": p.filename,
+                    "num_annotations": len(p.annotations),
+                    "position": (p.position_x, p.position_y)
+                } for p in premapper.photos
+            ],
+            "hints": hints
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/explorer/premap/composite")
+def explorer_premap_get_composite():
+    """Get the composite stitched map as image."""
+    if not hasattr(app.state.runtime, "explorer") or not app.state.runtime.explorer:
+        return Response(content=b"", media_type="image/jpeg")
+    
+    try:
+        if not hasattr(app.state.runtime.explorer, "premapper"):
+            return Response(content=b"", media_type="image/jpeg")
+        
+        premapper = app.state.runtime.explorer.premapper
+        if premapper.composite_map is None or premapper.composite_map.size == 0:
+            return Response(content=b"", media_type="image/jpeg")
+        
+        # Convert to JPEG
+        import io
+        from PIL import Image
+        
+        pil_img = Image.fromarray(cv2.cvtColor(premapper.composite_map, cv2.COLOR_BGR2RGB))
+        buf = io.BytesIO()
+        pil_img.save(buf, format="JPEG", quality=85)
+        buf.seek(0)
+        
+        return StreamingResponse(buf, media_type="image/jpeg")
+    except Exception:
+        return Response(content=b"", media_type="image/jpeg")
+
+
+@app.post("/explorer/premap/save")
+def explorer_premap_save():
+    """Save pre-mapping state."""
+    if not hasattr(app.state.runtime, "explorer") or not app.state.runtime.explorer:
+        return {"error": "Explorer not initialized"}
+    
+    try:
+        if not hasattr(app.state.runtime.explorer, "premapper"):
+            return {"error": "No pre-mapping session active"}
+        
+        app.state.runtime.explorer.premapper.save_state()
+        return {"success": True}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/explorer/premap/load")
+def explorer_premap_load():
+    """Load pre-mapping state."""
+    if not hasattr(app.state.runtime, "explorer") or not app.state.runtime.explorer:
+        return {"error": "Explorer not initialized"}
+    
+    try:
+        from .explorer.premapper import Premapper
+        from pathlib import Path
+        
+        premap_dir = Path("explorer_state/premap")
+        premapper = Premapper(premap_dir)
+        
+        if premapper.load_state():
+            app.state.runtime.explorer.premapper = premapper
+            return {"success": True, "num_photos": len(premapper.photos)}
+        else:
+            return {"success": False, "error": "No saved pre-mapping state found"}
+    except Exception as e:
+        return {"error": str(e)}

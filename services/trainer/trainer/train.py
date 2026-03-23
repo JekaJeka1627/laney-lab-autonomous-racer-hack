@@ -60,6 +60,7 @@ def train_from_dataset_snapshot(
     epochs: int = 3,
     batch_size: int = 32,
     learning_rate: float = 3e-4,
+    augment: bool = True,
 ) -> TrainingOutputs:
     artifacts_dir.mkdir(parents=True, exist_ok=True)
 
@@ -94,9 +95,16 @@ def train_from_dataset_snapshot(
             mode="placeholder",
         )
 
+    # Set up augmentation pipeline (only applied to training split)
+    aug_pipeline = None
+    if augment:
+        from trainer.augmentation import AugmentationPipeline
+        aug_pipeline = AugmentationPipeline()
+
     class DrivingDataset(Dataset):  # type: ignore[misc]
-        def __init__(self, items: list[tuple[Path, float]]):
+        def __init__(self, items: list[tuple[Path, float]], augmentation=None):
             self.items = items
+            self.augmentation = augmentation
 
         def __len__(self):
             return len(self.items)
@@ -104,14 +112,25 @@ def train_from_dataset_snapshot(
         def __getitem__(self, idx: int):
             img_path, steering = self.items[idx]
             x = _load_image_tensor_array(img_path)
+            if self.augmentation is not None:
+                x, steering = self.augmentation(x, steering)
             return torch.tensor(x, dtype=torch.float32), torch.tensor([steering], dtype=torch.float32)
 
-    dataset = DrivingDataset(samples)
-    val_size = max(1, int(len(dataset) * 0.2))
-    train_size = len(dataset) - val_size
+    # Split indices first, then create separate datasets so augmentation
+    # is only applied to training data (validation stays clean).
+    all_indices = list(range(len(samples)))
+    val_size = max(1, int(len(samples) * 0.2))
+    train_size = len(samples) - val_size
     if train_size < 1:
-        train_size, val_size = len(dataset) - 1, 1
-    train_ds, val_ds = random_split(dataset, [train_size, val_size], generator=torch.Generator().manual_seed(42))
+        train_size, val_size = len(samples) - 1, 1
+
+    gen = torch.Generator().manual_seed(42)
+    perm = torch.randperm(len(samples), generator=gen).tolist()
+    train_items = [samples[i] for i in perm[:train_size]]
+    val_items = [samples[i] for i in perm[train_size:]]
+
+    train_ds = DrivingDataset(train_items, augmentation=aug_pipeline)
+    val_ds = DrivingDataset(val_items, augmentation=None)
 
     train_loader = DataLoader(train_ds, batch_size=min(batch_size, max(1, train_size)), shuffle=True)
     val_loader = DataLoader(val_ds, batch_size=min(batch_size, max(1, val_size)), shuffle=False)
@@ -165,6 +184,22 @@ def train_from_dataset_snapshot(
     pytorch_path = artifacts_dir / "model.pt"
     torch.save({"state_dict": model.state_dict(), "metrics": {"train_loss": train_loss_final, "val_loss": val_loss_final}}, pytorch_path)
 
+    # Export to ONNX format.
+    # The .onnx file is used directly by the vehicle runtime for real-time
+    # steering inference.  Both OpenVINO and onnxruntime can load .onnx files
+    # without any conversion step.
+    #
+    # On the DeepRacer (Intel Atom CPU), the vehicle runtime prefers OpenVINO
+    # for inference because it provides 2-3x faster execution than onnxruntime
+    # by using Intel-specific optimizations:
+    #   - Graph-level layer fusion (Conv+BN+ReLU merged into single ops)
+    #   - Intel MKL-DNN / oneDNN kernels tuned for Atom's cache hierarchy
+    #   - Vectorized SIMD instructions (SSE4.2 / AVX on supported chips)
+    #   - Automatic precision selection and memory layout optimization
+    #
+    # The opset_version=12 is chosen for broad compatibility -- both OpenVINO
+    # 2024.x and onnxruntime 1.20 support it fully.  No IR conversion (.xml/.bin)
+    # is needed; OpenVINO reads .onnx directly via core.read_model().
     onnx_path = artifacts_dir / "model.onnx"
     onnx_export_error: str | None = None
     try:
@@ -191,6 +226,11 @@ def train_from_dataset_snapshot(
         "sample_count": len(samples),
         "train_samples": train_size,
         "val_samples": val_size,
+        "augmentation": augment,
+        # The exported .onnx model is compatible with both inference backends:
+        #   - openvino (preferred, 2-3x faster on Intel Atom)
+        #   - onnxruntime (fallback for non-Intel hardware)
+        "inference_backends": ["openvino", "onnxruntime"],
     }
     if onnx_export_error:
         metrics["onnx_export_error"] = onnx_export_error

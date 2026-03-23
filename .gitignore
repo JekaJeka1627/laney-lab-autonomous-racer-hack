@@ -2,3 +2,20 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Model binaries (too large for git -- document download source instead)
+*.onnx
+*.pt
+*.pth
+*.tar.gz
+*.tflite
+*.bin
+
+# Model registry generated data (local state, not shared via git)
+model_registry/active_model.json
+model_registry/switch_log.jsonl
+model_registry/eval_log.jsonl
+
+# Vehicle runtime active model deploy directory
+services/vehicle-runtime/.active-model/
+.vehicle-runtime-cache/
+.vehicle-runtime-test-cache/

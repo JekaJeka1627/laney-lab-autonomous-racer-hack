@@ -1,0 +1,2 @@
+# Model Registry CLI -- no external dependencies beyond Python 3.10+ stdlib.
+# The vehicle runtime's onnxruntime dependency is separate.

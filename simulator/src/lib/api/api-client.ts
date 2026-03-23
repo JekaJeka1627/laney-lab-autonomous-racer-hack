@@ -105,7 +105,9 @@ export interface ListTrainingJobsResponsePayload {
 export function getApiBaseUrl(): string | null {
   const raw = process.env.NEXT_PUBLIC_API_URL?.trim();
   if (raw) return raw.replace(/\/+$/, '');
-  if (typeof window !== 'undefined') return window.location.origin;
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return window.location.origin.replace(/\/+$/, '');
+  }
   return null;
 }
 
@@ -124,7 +126,7 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export function isApiConfigured(): boolean {
-  return !!getApiBaseUrl();
+  return getApiBaseUrl() !== null;
 }
 
 export interface ActiveModelPayload {
@@ -168,7 +170,15 @@ export async function listRemoteRuns(limit = 20): Promise<RunRecordPayload[]> {
 export async function getRemoteRunsSummary(): Promise<RunsSummaryPayload | null> {
   const base = getApiBaseUrl();
   if (!base) return null;
-  return requestJson<RunsSummaryPayload>(`${base}/api/stats`);
+  try {
+    return await requestJson<RunsSummaryPayload>(`${base}/api/runs/summary`);
+  } catch (error) {
+    // Older deployments used /api/stats for pooled run totals.
+    if (error instanceof Error && error.message.includes('(404)')) {
+      return requestJson<RunsSummaryPayload>(`${base}/api/stats`);
+    }
+    throw error;
+  }
 }
 
 export async function setActiveModelVersion(modelVersion: string): Promise<void> {

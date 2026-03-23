@@ -90,6 +90,10 @@ interface GameState {
   // Timer
   elapsedMs: number;
   setElapsedMs: (ms: number) => void;
+
+  // Celebration
+  celebrationActive: boolean;
+  setCelebrationActive: (active: boolean) => void;
 }
 
 function loadSavedStats() {
@@ -164,6 +168,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       offTrackCount: 0,
       xp: s.xp + xpGain,
     });
+    // Trigger celebration
+    get().setCelebrationActive(true);
   },
   resetLaps: () => set({ lapCount: 0, laps: [], bestLapMs: null, currentLapStart: performance.now(), offTrackCount: 0 }),
 
@@ -209,4 +215,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   elapsedMs: 0,
   setElapsedMs: (ms) => set({ elapsedMs: ms }),
+
+  celebrationActive: false,
+  setCelebrationActive: (active) => set({ celebrationActive: active }),
 }));

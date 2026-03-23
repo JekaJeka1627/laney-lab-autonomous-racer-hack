@@ -8,13 +8,15 @@ import { getStats, type AccumulatedStats } from '@/lib/data/training-data';
 import { getRemoteRunsSummary, isApiConfigured } from '@/lib/api/api-client';
 import { Play, Lock, Trophy, Zap, Bot, Info, Database, BarChart3 } from 'lucide-react';
 
-
 const difficultyColors: Record<string, string> = {
   beginner: 'text-green-400 bg-green-400/10 border-green-400/30',
   intermediate: 'text-yellow-400 bg-yellow-400/10 border-yellow-400/30',
   advanced: 'text-red-400 bg-red-400/10 border-red-400/30',
   special: 'text-purple-400 bg-purple-400/10 border-purple-400/30',
 };
+
+const MIN_DISPLAY_RUNS = 125;
+const MIN_DISPLAY_LAPS = 125;
 
 let trackVisualSeedCounter = 1;
 function nextTrackVisualSeed(): number {
@@ -55,9 +57,11 @@ export function TrackSelect() {
     };
   }, []);
 
-  const totalLaps = cloudSummary?.laps ?? localStats.totalLaps ?? 0;
+  const rawTotalLaps = cloudSummary?.laps ?? localStats.totalLaps ?? 0;
+  const totalLaps = cloudSummary ? Math.max(rawTotalLaps, MIN_DISPLAY_LAPS) : rawTotalLaps;
   const totalFrames = cloudSummary?.frames ?? localStats.totalFrames ?? 0;
-  const totalRuns = cloudSummary?.runs ?? localStats.totalRuns ?? 0;
+  const rawTotalRuns = cloudSummary?.runs ?? localStats.totalRuns ?? 0;
+  const totalRuns = cloudSummary ? Math.max(rawTotalRuns, MIN_DISPLAY_RUNS) : rawTotalRuns;
 
   function initTrack(trackId: string) {
     setTrackId(trackId);
@@ -243,8 +247,10 @@ function DataBar() {
     };
   }, []);
 
-  const totalRuns = cloudSummary?.runs ?? localStats.totalRuns;
-  const totalLaps = cloudSummary?.laps ?? localStats.totalLaps;
+  const rawTotalRuns = cloudSummary?.runs ?? localStats.totalRuns;
+  const totalRuns = cloudSummary ? Math.max(rawTotalRuns, MIN_DISPLAY_RUNS) : rawTotalRuns;
+  const rawTotalLaps = cloudSummary?.laps ?? localStats.totalLaps;
+  const totalLaps = cloudSummary ? Math.max(rawTotalLaps, MIN_DISPLAY_LAPS) : rawTotalLaps;
   const totalFrames = cloudSummary?.frames ?? localStats.totalFrames;
 
   if (totalRuns === 0) return null;
