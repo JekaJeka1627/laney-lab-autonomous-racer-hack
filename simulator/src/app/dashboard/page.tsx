@@ -38,6 +38,7 @@ const tabs: { id: Tab; label: string; icon: typeof BarChart3; description: strin
   { id: 'inspector', label: 'Inspector', icon: Zap, description: 'Advanced frame-level data' },
 ];
 
+// Main dashboard page — manages all state and renders the tab layout with stats banner.
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState<Tab>('driving');
   const [runs, setRuns] = useState<TrainingRun[]>([]);
@@ -54,6 +55,8 @@ export default function DashboardPage() {
   const [creatingJob, setCreatingJob] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [showHelp, setShowHelp] = useState(() => {
+    // Lazy initializer: SSR guard needed because localStorage is browser-only.
+    // Default to showing help unless the user has previously dismissed it.
     if (typeof window === 'undefined') return false;
     return localStorage.getItem('dashboard-help-dismissed') !== 'true';
   });
@@ -66,7 +69,7 @@ export default function DashboardPage() {
     setStats(getStats());
   }, []);
 
-  // Close export dropdown on outside click
+  // Closes the export dropdown when the user clicks outside of it.
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (exportRef.current && !exportRef.current.contains(e.target as Node)) {
@@ -78,10 +81,8 @@ export default function DashboardPage() {
   }, []);
 
 
-  /* async Function to fetch and set data for the state:
-  remoteSummary, RemoteModels, RemoteJobs, ActiveRemoteModel, and RemoteRuns
-  with data from the cloud
-  */
+  // Fetches all cloud state in parallel (summary, models, jobs, active model, recent runs)
+  // and updates the corresponding state variables. Shows a loading indicator while in flight.
   async function refreshCloudData() {
     if (!isApiConfigured()) return;
     setRemoteLoading(true);
@@ -93,7 +94,7 @@ export default function DashboardPage() {
         fetchRemoteTrainingJobs(20),
         fetchActiveModelVersion(),
         listRemoteRuns(12),
-      ]);//awaits data from api pulled using list of functions imported from @/lib/api/api-client
+      ]); // All requests run in parallel to minimise total loading time.
       setRemoteSummary(summary);
       setRemoteModels(models);
       setRemoteJobs(jobs);
@@ -107,11 +108,14 @@ export default function DashboardPage() {
     }
   }
 
+  // Triggers the initial cloud data fetch when the API is configured.
   useEffect(() => {
     if (!isApiConfigured()) return;
     void refreshCloudData();
   }, []);
 
+  // Polls the local run-sync queue every 2 seconds and also listens for cross-tab storage
+  // events so the sync status badge stays up to date without a manual refresh.
   useEffect(() => {
     const refreshLocalSync = () => setLocalSyncEntries(listRunSyncQueue());
     refreshLocalSync();
@@ -126,18 +130,21 @@ export default function DashboardPage() {
     };
   }, []);
 
+  // Serializes all training runs to the requested format (JSON or CSV) and triggers a browser download.
   function handleExport(format: 'json' | 'csv') {
     const data = format === 'json' ? exportRunsAsJSON() : exportRunsAsCSV();
     const blob = new Blob([data], { type: format === 'json' ? 'application/json' : 'text/csv' });
+    // Programmatically click a temporary <a> tag to trigger the browser's file download dialog.
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = `deepracer-training-data.${format}`;
     a.click();
-    URL.revokeObjectURL(url);
+    URL.revokeObjectURL(url); // Free the object URL immediately after the download starts.
     setShowExportMenu(false);
   }
-  //delete runs
+  // Deletes the specified runs by ID, refreshes the runs/stats state, and clears the
+  // selected run if it was among those deleted.
   function handleDeleteRuns(ids: string[]) {
     deleteRuns(ids);
     setRuns(getRuns());
@@ -147,6 +154,8 @@ export default function DashboardPage() {
     }
   }
 
+  // Packages the frame-capture images for a single run into a ZIP file and downloads it.
+  // No-ops if the run has no frame capture data.
   async function handleDownloadRunCapture(run: TrainingRun) {
     if (!run.hasFrameCapture) return;
     try {
@@ -158,6 +167,8 @@ export default function DashboardPage() {
     }
   }
 
+  // Bundles frame captures from every run that has them into a single ZIP and downloads it.
+  // Shows a loading state while the ZIP is being built.
   async function handleExportAllCaptureZips() {
     const captureRunIds = runs.filter((r) => r.hasFrameCapture).map((r) => r.id);
     if (captureRunIds.length === 0) {
@@ -168,7 +179,7 @@ export default function DashboardPage() {
     setExportingCaptureZip(true);
     try {
       const zip = await exportAllRunCapturesZip(captureRunIds);
-      downloadBlob(zip, `deepracer-captured-runs-${new Date().toISOString().slice(0, 10)}.zip`);
+      downloadBlob(zip, `deepracer-captured-runs-${new Date().toISOString().slice(0, 10)}.zip`); // slice(0,10) gives YYYY-MM-DD
     } catch (error) {
       console.error(error);
       alert('Failed to build bulk capture export zip.');
@@ -177,6 +188,7 @@ export default function DashboardPage() {
     }
   }
 
+  // Prompts the user for confirmation, then wipes all training runs and stats from localStorage.
   function handleClearData() {
     if (confirm('Clear all training data? This cannot be undone.')) {
       localStorage.removeItem('deepracer-training-runs');
@@ -186,6 +198,7 @@ export default function DashboardPage() {
     }
   }
 
+  // Hides the help banner and persists the dismissal to localStorage so it stays hidden on reload.
   function dismissHelp() {
     setShowHelp(false);
     localStorage.setItem('dashboard-help-dismissed', 'true');
@@ -193,6 +206,7 @@ export default function DashboardPage() {
 
   const manualRuns = runs.filter((r) => r.driveMode === 'manual');
   const aiRuns = runs.filter((r) => r.driveMode === 'ai');
+  // Prefer cloud-aggregated stats (team-wide) over local stats when available.
   const totalRuns = remoteSummary?.completed_runs ?? runs.length;
   const totalLaps = remoteSummary?.completed_laps ?? stats?.totalLaps ?? 0;
   const totalFrames = remoteSummary?.completed_frames ?? stats?.totalFrames ?? 0;
@@ -443,7 +457,10 @@ export default function DashboardPage() {
 }
 
 /* ─── My Driving Tab ─── */
+// Displays a breakdown of manual vs AI runs, per-track frame distribution,
+// lap time progression chart, and speed distribution analysis.
 function MyDrivingTab({ runs, manualRuns, aiRuns, stats }: { runs: TrainingRun[]; manualRuns: TrainingRun[]; aiRuns: TrainingRun[]; stats: AccumulatedStats | null }) {
+  // Aggregate runs by track so each track shows a combined run/lap/frame count.
   const trackBreakdown: Record<string, { runs: number; laps: number; frames: number }> = {};
   for (const r of runs) {
     const existing = trackBreakdown[r.trackId] || { runs: 0, laps: 0, frames: 0 };
@@ -481,8 +498,8 @@ function MyDrivingTab({ runs, manualRuns, aiRuns, stats }: { runs: TrainingRun[]
           <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">By Track</h3>
           <div className="space-y-2">
             {Object.entries(trackBreakdown).map(([trackId, data]) => {
-              const totalFrames = stats?.totalFrames || 1;
-              const pct = Math.round((data.frames / totalFrames) * 100);
+              const totalFrames = stats?.totalFrames || 1; // Fallback to 1 to avoid division by zero.
+              const pct = Math.round((data.frames / totalFrames) * 100); // % of all frames from this track
               return (
                 <div key={trackId} className="space-y-1">
                   <div className="flex items-center justify-between text-sm">
@@ -512,6 +529,8 @@ function MyDrivingTab({ runs, manualRuns, aiRuns, stats }: { runs: TrainingRun[]
 }
 
 /* ─── Training Data Tab ─── */
+// Shows track coverage heatmap and a full sortable/selectable table of recorded runs.
+// Supports per-run deletion and frame-capture ZIP download.
 function TrainingDataTab({
   runs,
   selectedRun,
@@ -543,6 +562,9 @@ function TrainingDataTab({
 }
 
 /* ─── Cloud / AI Models Tab ─── */
+// Renders the cloud-connected AI models and training jobs panel. Shows a prompt to
+// configure the API when not connected. Allows starting new training jobs, setting the
+// active model version, and monitoring the local run-sync queue status.
 function CloudTab({
   apiConfigured,
   models,
@@ -591,6 +613,8 @@ function CloudTab({
     );
   }
 
+  // Only block the whole tab with a spinner on the very first load; subsequent refreshes
+  // update data in the background while the existing list remains visible.
   if (loading && models.length === 0 && jobs.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center space-y-3">
@@ -600,6 +624,7 @@ function CloudTab({
     );
   }
 
+  // Jobs that are still in progress — used to show the "N in progress" badge.
   const queuedJobs = jobs.filter((j) => j.status === 'queued' || j.status === 'running');
 
   return (
@@ -654,10 +679,11 @@ function CloudTab({
                 <p className="text-xs text-gray-500">No models yet. Start a training job to create one.</p>
               </div>
             ) : models.map((m) => {
+              // metrics arrives as untyped JSON from the API, so values are narrowed before use.
               const metrics = (m.training?.metrics as Record<string, unknown> | undefined) ?? {};
               const trainLoss = typeof metrics.train_loss === 'number' ? metrics.train_loss : null;
               const valLoss = typeof metrics.val_loss === 'number' ? metrics.val_loss : null;
-              const hasOnnx = !!m.artifacts?.onnx_uri;
+              const hasOnnx = !!m.artifacts?.onnx_uri; // ONNX export is required to run the model in-sim.
               const isActive = activeModelVersion === m.model_version;
               return (
                 <div key={m.model_id} className={`rounded-xl border p-3 ${isActive ? 'border-green-700/50 bg-green-950/10' : 'border-gray-800 bg-gray-950/20'}`}>
@@ -683,6 +709,7 @@ function CloudTab({
                           .catch((e) => setActionError(e instanceof Error ? e.message : String(e)))
                           .finally(() => setBusyActiveVersion(null));
                       }}
+                      // Disable all "Set Active" buttons while any one of them is in flight.
                       disabled={isActive || busyActiveVersion !== null}
                       className={`px-2.5 py-1 text-[11px] rounded-md transition-colors disabled:opacity-50 ${
                         isActive
@@ -835,6 +862,8 @@ function CloudTab({
 }
 
 /* ─── Progress Milestone ─── */
+// Renders a progress bar toward the next dataset-size milestone (10 / 50 / 200 / 1000 runs).
+// Finds the first incomplete milestone and shows current progress as a percentage.
 function ProgressMilestone({ totalRuns }: { totalRuns: number }) {
   // Define milestones
   const milestones = [
@@ -844,7 +873,7 @@ function ProgressMilestone({ totalRuns }: { totalRuns: number }) {
     { label: 'Massive dataset', target: 1000, unit: 'runs', current: totalRuns },
   ];
 
-  // Find the next incomplete milestone
+  // Find the next incomplete milestone; fall back to the last one if all are complete.
   const next = milestones.find((m) => m.current < m.target) ?? milestones[milestones.length - 1];
   const pct = Math.min(100, Math.round((next.current / next.target) * 100));
 
@@ -872,6 +901,8 @@ function ProgressMilestone({ totalRuns }: { totalRuns: number }) {
 }
 
 /* ─── Empty State ─── */
+// Placeholder shown on the driving/data/inspector tabs when no training runs exist yet.
+// Prompts the user to go drive laps in the simulator.
 function EmptyState() {
   return (
     <div className="flex flex-col items-center justify-center py-20 text-center space-y-4">
