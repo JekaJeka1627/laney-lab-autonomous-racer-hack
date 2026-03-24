@@ -17,10 +17,14 @@ import cv2
 import numpy as np
 
 from .breadcrumb_trail import BreadcrumbTrail
-from .config import ExplorerConfig
+from .config import ExplorerConfig, ExplorerVariant
 from .landmark_db import LandmarkDatabase
 from .navigation_planner import Action, ExplorerMode, NavigationPlanner, OdometryState
-from .driving_behavior import list_behaviors
+from .driving_behavior import (
+    DeepRacerHybridBehavior,
+    SpeedAdaptiveBehavior,
+    list_behaviors,
+)
 from .obstacle_detector import ObstacleDetector
 from .occupancy_map import OccupancyMap
 
@@ -89,11 +93,63 @@ class ExplorerRuntime:
     def last_action(self) -> Action:
         return self._last_action
 
+    def set_variant(self, variant_id: str) -> dict:
+        """
+        Switch the explorer variant (pure / hybrid-autopilot / hybrid-center-align / ...).
+        Can be called while the explorer is stopped or running.
+        Returns a summary dict with status and loaded backend info.
+        """
+        try:
+            variant = ExplorerVariant(variant_id)
+        except ValueError:
+            return {"ok": False, "error": f"Unknown variant '{variant_id}'"}
+
+        self.config.variant = variant
+
+        if variant.is_hybrid:
+            behavior = DeepRacerHybridBehavior(
+                variant_id=variant.value,
+                throttle=self.config.explore_throttle,
+            )
+        else:
+            behavior = SpeedAdaptiveBehavior(
+                max_throttle=self.config.explore_throttle,
+                min_throttle=self.config.avoid_throttle,
+            )
+
+        # Activate the new behavior (loads track model if needed)
+        if hasattr(self.planner, "active_behavior") and self.planner.active_behavior:
+            try:
+                from .driving_behavior import BEHAVIOR_REGISTRY
+                old = BEHAVIOR_REGISTRY.get(self.planner.active_behavior)
+                if old:
+                    pass  # on_deactivate handled inside DeepRacerHybridBehavior
+            except Exception:
+                pass
+
+        behavior.on_activate()
+        self.planner.set_behavior(behavior)
+
+        backend = "none"
+        if isinstance(behavior, DeepRacerHybridBehavior) and behavior._adapter:
+            backend = behavior._adapter.info.backend if behavior._adapter.info else "loaded"
+
+        log.info("Explorer variant set to '%s' (backend=%s)", variant.value, backend)
+        return {
+            "ok": True,
+            "variant": variant.value,
+            "label": variant.label,
+            "backend": backend,
+            "track_model_loaded": backend != "none",
+        }
+
     @property
     def status_dict(self) -> dict:
         """Return a status snapshot for the dashboard."""
         return {
             "mode": self.planner.mode.name,
+            "variant": self.config.variant.value,
+            "variant_label": self.config.variant.label,
             "distance_ft": round(self._distance_traveled_ft, 1),
             "breadcrumbs": self.trail.trail_length,
             "landmarks": self.landmarks.count,

@@ -102,14 +102,19 @@ class NavigationPlanner:
         """ID of the currently active driving behavior."""
         return self._behavior.name
 
-    def set_behavior(self, behavior_id: str, **kwargs) -> str:
+    def set_behavior(self, behavior_id_or_instance, **kwargs) -> str:
         """
         Switch to a different driving behavior.
+        Accepts either a behavior ID string or a pre-constructed DrivingBehavior instance.
         Returns the name of the newly active behavior.
         """
         self._behavior.on_deactivate()
-        self._behavior = create_behavior(behavior_id, **kwargs)
-        self._behavior.on_activate()
+        if isinstance(behavior_id_or_instance, str):
+            self._behavior = create_behavior(behavior_id_or_instance, **kwargs)
+            self._behavior.on_activate()
+        else:
+            self._behavior = behavior_id_or_instance
+            # Caller is responsible for calling on_activate before passing
         log.info("Driving behavior switched to: %s", self._behavior.name)
         return self._behavior.name
 

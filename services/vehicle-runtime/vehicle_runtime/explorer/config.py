@@ -4,7 +4,45 @@ Configuration for the Visual Explorer.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import Enum
 from pathlib import Path
+
+
+class ExplorerVariant(str, Enum):
+    PURE              = "pure"               # rule-based, no track model
+    HYBRID_AUTOPILOT  = "hybrid-autopilot"   # uses whichever track model is active
+    HYBRID_CENTER     = "hybrid-center-align"
+    HYBRID_SDC        = "hybrid-sdc-navigator"
+
+    @property
+    def label(self) -> str:
+        return {
+            "pure":                  "Pure Explorer",
+            "hybrid-autopilot":      "Hybrid Autopilot",
+            "hybrid-center-align":   "Hybrid + Center-Align",
+            "hybrid-sdc-navigator":  "Hybrid + WSU Final-Traveller PPO",
+        }.get(self.value, self.value)
+
+    @property
+    def description(self) -> str:
+        return {
+            "pure":
+                "Rule-based obstacle avoidance and frontier exploration. "
+                "No track model required.",
+            "hybrid-autopilot":
+                "Borrows steering reflexes from the currently active track model. "
+                "Explorer overrides when obstacles are detected.",
+            "hybrid-center-align":
+                "Uses Center-Align continuous PPO for smooth steering. "
+                "Best for open spaces; fast and fluid.",
+            "hybrid-sdc-navigator":
+                "Uses WSU Final-Traveller PPO for stable steering. "
+                "More conservative, good for cluttered areas.",
+        }.get(self.value, "")
+
+    @property
+    def is_hybrid(self) -> bool:
+        return self.value != "pure"
 
 
 @dataclass
@@ -55,3 +93,6 @@ class ExplorerConfig:
     frame_width: int = 320
     frame_height: int = 240
     target_fps: float = 10.0
+
+    # -- Explorer variant ----------------------------------------------------
+    variant: ExplorerVariant = ExplorerVariant.PURE

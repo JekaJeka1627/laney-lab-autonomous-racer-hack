@@ -735,6 +735,105 @@ with tab_explorer:
 
     st.markdown("---")
 
+    # -- Explorer Variant selector -------------------------------------------
+    st.subheader("Explorer Variant")
+    st.caption(
+        "Choose how the explorer drives. Hybrid variants borrow steering reflexes "
+        "from a trained track model while the explorer still handles obstacle avoidance."
+    )
+
+    def get_explorer_variants() -> dict:
+        try:
+            req = urllib.request.Request(
+                f"{VEHICLE_RUNTIME_URL}/explorer/variants", method="GET"
+            )
+            with urllib.request.urlopen(req, timeout=3) as resp:
+                return json.loads(resp.read().decode())
+        except Exception:
+            return {"variants": [], "current": "pure"}
+
+    variants_data = get_explorer_variants()
+    all_variants = variants_data.get("variants", [])
+    current_variant = variants_data.get("current", "pure")
+
+    if all_variants:
+        variant_ids    = [v["id"] for v in all_variants]
+        variant_labels = [v["label"] for v in all_variants]
+        variant_descs  = {v["id"]: v["description"] for v in all_variants}
+        variant_avail  = {v["id"]: v["model_available"] for v in all_variants}
+        variant_hybrid = {v["id"]: v["is_hybrid"] for v in all_variants}
+
+        # Label with availability note for hybrid variants
+        display_labels = []
+        for v in all_variants:
+            label = v["label"]
+            if v["is_hybrid"] and not v["model_available"]:
+                label += " (model not found -- will use pure explorer)"
+            display_labels.append(label)
+
+        current_idx = variant_ids.index(current_variant) if current_variant in variant_ids else 0
+
+        selected_label = st.radio(
+            "Driving Mode",
+            display_labels,
+            index=current_idx,
+            key="explorer_variant_radio",
+        )
+        selected_idx = display_labels.index(selected_label)
+        selected_id  = variant_ids[selected_idx]
+
+        st.caption(variant_descs.get(selected_id, ""))
+
+        if variant_hybrid.get(selected_id) and variant_avail.get(selected_id):
+            st.info(
+                "Hybrid mode: track model handles smooth steering. "
+                "Explorer takes over when obstacles are detected."
+            )
+        elif variant_hybrid.get(selected_id) and not variant_avail.get(selected_id):
+            st.warning(
+                "Track model file not found on disk. "
+                "Run `python -m model_registry.preflight --fix` to download it. "
+                "The explorer will run in pure mode as a fallback."
+            )
+
+        col_apply, col_status = st.columns([2, 3])
+        with col_apply:
+            if st.button("Apply Variant", key="apply_variant", use_container_width=True):
+                try:
+                    req = urllib.request.Request(
+                        f"{VEHICLE_RUNTIME_URL}/explorer/variant?variant_id={selected_id}",
+                        method="POST",
+                        data=b"",
+                        headers={"Content-Type": "application/json"},
+                    )
+                    with urllib.request.urlopen(req, timeout=5) as resp:
+                        result = json.loads(resp.read().decode())
+                    if result.get("ok"):
+                        backend = result.get("backend", "none")
+                        loaded  = result.get("track_model_loaded", False)
+                        if loaded:
+                            st.success(
+                                f"Variant set: {result.get('label')} "
+                                f"(backend: {backend})"
+                            )
+                        else:
+                            st.success(f"Variant set: {result.get('label')}")
+                        st.rerun()
+                    else:
+                        st.error(result.get("error", "Failed to set variant"))
+                except Exception:
+                    st.error("Could not reach runtime to set variant.")
+
+        with col_status:
+            if current_variant != "pure":
+                st.markdown(f"**Active variant:** `{current_variant}`")
+            else:
+                st.markdown("**Active variant:** Pure Explorer")
+    else:
+        st.info("Variant info not available. Explorer runtime may not be running.")
+
+    st.markdown("---")
+
     # -- Mission presets -----------------------------------------------------
     st.subheader("Quick Missions")
     st.caption("Select a distance and the car will explore outward, then automatically return home.")

@@ -298,6 +298,54 @@ def explorer_list_behaviors():
         return {"error": str(e)}
 
 
+@app.get("/explorer/variants")
+def explorer_list_variants():
+    """List all available explorer variants with labels, descriptions, and model availability."""
+    from vehicle_runtime.explorer.config import ExplorerVariant
+    from vehicle_runtime.explorer.track_model_adapter import KNOWN_TRACK_MODELS, _find_registry_root
+    from pathlib import Path
+
+    model_dirs = {
+        "center-align":  _find_registry_root() / "models" / "external" / "center-align-continuous",
+        "sdc-navigator": _find_registry_root() / "models" / "external" / "sdc-navigator",
+    }
+
+    def _model_available(mid: str) -> bool:
+        d = model_dirs.get(mid)
+        return d is not None and any(d.rglob("model.pb"))
+
+    variants = []
+    for v in ExplorerVariant:
+        info = KNOWN_TRACK_MODELS.get(v.value, {})
+        model_id = info.get("model_id", "")
+        available = True if not model_id else _model_available(model_id)
+        variants.append({
+            "id": v.value,
+            "label": v.label,
+            "description": v.description,
+            "is_hybrid": v.is_hybrid,
+            "model_available": available,
+        })
+
+    current = "pure"
+    if hasattr(app.state, "runtime") and hasattr(app.state.runtime, "explorer") and app.state.runtime.explorer:
+        current = app.state.runtime.explorer.config.variant.value
+
+    return {"variants": variants, "current": current}
+
+
+@app.post("/explorer/variant")
+def explorer_set_variant(variant_id: str):
+    """Switch the explorer driving variant (pure / hybrid-autopilot / ...)."""
+    if not hasattr(app.state.runtime, "explorer") or not app.state.runtime.explorer:
+        return {"error": "Explorer not initialized"}
+    try:
+        result = app.state.runtime.explorer.set_variant(variant_id)
+        return result
+    except Exception as e:
+        return {"error": str(e)}
+
+
 @app.get("/explorer/map-image")
 def explorer_map_image():
     """Get the current occupancy map as PNG."""

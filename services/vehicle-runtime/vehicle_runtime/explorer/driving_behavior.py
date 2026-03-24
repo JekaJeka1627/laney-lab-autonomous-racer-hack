@@ -323,6 +323,105 @@ class TrainedModelBehavior(DrivingBehavior):
             return self._reactive.compute(inp)
 
 
+class DeepRacerHybridBehavior(DrivingBehavior):
+    """
+    Hybrid autopilot: borrows steering from a DeepRacer track model while
+    the explorer handles obstacle avoidance and navigation.
+
+    Blend logic:
+      - Center clear:   trust track model heavily (blend_clear)
+      - Center caution: mix track + reactive (blend_caution)
+      - Center blocked: ignore track model, full reactive avoidance
+
+    This gives smooth, trained driving in open space while still reacting
+    to obstacles that the track model was never trained to handle.
+    """
+
+    name = "deepracer-hybrid"
+    description = "Track model steering + explorer obstacle avoidance"
+
+    def __init__(
+        self,
+        variant_id: str = "hybrid-autopilot",
+        blend_clear: float = 0.72,
+        blend_caution: float = 0.35,
+        caution_threshold: float = 0.5,
+        blocked_threshold: float = 0.75,
+        throttle: float = 0.4,
+    ):
+        self.variant_id = variant_id
+        self.blend_clear = blend_clear
+        self.blend_caution = blend_caution
+        self.caution_threshold = caution_threshold
+        self.blocked_threshold = blocked_threshold
+        self.throttle = throttle
+        self._adapter = None
+        self._reactive = SpeedAdaptiveBehavior(max_throttle=throttle, min_throttle=0.2)
+
+    def on_activate(self) -> None:
+        from .track_model_adapter import load_adapter_for_variant
+        self._adapter = load_adapter_for_variant(self.variant_id)
+        if self._adapter is not None:
+            log.info(
+                "DeepRacerHybridBehavior[%s]: track model loaded (backend=%s)",
+                self.variant_id,
+                self._adapter.info.backend if self._adapter.info else "?",
+            )
+        else:
+            log.warning(
+                "DeepRacerHybridBehavior[%s]: track model unavailable, "
+                "running as pure speed-adaptive explorer",
+                self.variant_id,
+            )
+
+    def on_deactivate(self) -> None:
+        if self._adapter is not None:
+            self._adapter.close()
+            self._adapter = None
+
+    def compute(self, inp: BehaviorInput) -> BehaviorOutput:
+        # Always compute the explorer's own reactive output for blending/fallback
+        reactive_out = self._reactive.compute(inp)
+
+        # No frame or no model loaded: pure explorer
+        if self._adapter is None or inp.forward_frame is None:
+            return reactive_out
+
+        # Run track model
+        prediction = self._adapter.predict(inp.forward_frame)
+        if prediction is None:
+            return reactive_out
+
+        track_steering, track_throttle = prediction
+
+        # Determine blend ratio from center obstacle closeness
+        center_closeness = inp.sector_scores[1]
+
+        if center_closeness >= self.blocked_threshold:
+            # Full avoidance -- ignore track model entirely
+            return reactive_out
+
+        if center_closeness >= self.caution_threshold:
+            blend = self.blend_caution
+        else:
+            blend = self.blend_clear
+
+        # Also reduce trust if the track model wants to steer INTO an obstacle
+        left_blocked  = inp.sector_scores[0] >= self.caution_threshold
+        right_blocked = inp.sector_scores[2] >= self.caution_threshold
+        if (track_steering < -0.3 and left_blocked) or (track_steering > 0.3 and right_blocked):
+            blend = max(0.0, blend - 0.4)
+
+        steering = blend * track_steering + (1 - blend) * reactive_out.steering
+        steering = max(-1.0, min(1.0, steering))
+
+        # Throttle: track model suggests speed, explorer modulates for obstacles
+        throttle = blend * track_throttle + (1 - blend) * reactive_out.throttle
+        throttle = max(0.0, min(1.0, throttle))
+
+        return BehaviorOutput(steering=steering, throttle=throttle)
+
+
 # ---------------------------------------------------------------------------
 # Registry
 # ---------------------------------------------------------------------------
@@ -332,6 +431,7 @@ BEHAVIOR_REGISTRY: dict[str, type[DrivingBehavior]] = {
     "smooth-pursuit": SmoothPursuitBehavior,
     "speed-adaptive": SpeedAdaptiveBehavior,
     "trained-model": TrainedModelBehavior,
+    "deepracer-hybrid": DeepRacerHybridBehavior,
 }
 
 
