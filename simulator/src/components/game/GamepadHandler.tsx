@@ -24,31 +24,22 @@ export function GamepadHandler() {
   useEffect(() => {
     let rafId: number;
 
-    function onConnected() {
-      useGameStore.getState().setGamepadConnected(true);
-    }
-
-    function onDisconnected() {
-      const remaining = navigator.getGamepads();
-      const anyLeft = Array.from(remaining).some(Boolean);
-      if (!anyLeft) {
-        useGameStore.getState().setGamepadConnected(false);
-        useGameStore.getState().setInput({ steer: 0, throttle: 0, brake: false });
-      }
-    }
-
-    window.addEventListener('gamepadconnected', onConnected);
-    window.addEventListener('gamepaddisconnected', onDisconnected);
-
-    // In case a gamepad was already connected before this component mounted
-    const already = Array.from(navigator.getGamepads()).some(Boolean);
-    if (already) useGameStore.getState().setGamepadConnected(true);
+    // Firefox will not populate getGamepads() unless a gamepadconnected listener
+    // is registered. The listener itself does nothing — the poll manages all state.
+    function noop() {}
+    window.addEventListener('gamepadconnected', noop);
+    window.addEventListener('gamepaddisconnected', noop);
 
     function poll() {
-      const gamepads = navigator.getGamepads();
-      const gp = gamepads[0] ?? gamepads[1] ?? gamepads[2] ?? gamepads[3];
+      const store = useGameStore.getState();
+      // Use the first *connected* gamepad. Firefox retains stale gamepad objects
+      // in the array after disconnection with connected=false, so we must filter.
+      const gp = Array.from(navigator.getGamepads()).find(g => g?.connected) ?? null;
 
       if (gp) {
+        // Update connected flag directly from poll — avoids event timing gaps
+        if (!store.gamepadConnected) store.setGamepadConnected(true);
+
         // Steer: negate axis so left stick left → steerTarget positive (left turn)
         const rawSteer = gp.axes[0] ?? 0;
         const steer = Math.abs(rawSteer) > DEADZONE ? -rawSteer : 0;
@@ -62,14 +53,17 @@ export function GamepadHandler() {
           ? (gp.buttons[6]?.value ?? 0)
           : Math.max(0, ((gp.axes[4] ?? -1) + 1) / 2);
 
-        useGameStore.getState().setInput({ steer, throttle, brake: brakeVal > 0.1 });
+        store.setInput({ steer, throttle, brake: brakeVal > 0.1 });
 
         // Start / Options → pause / resume
         if (gp.buttons[9]?.pressed) {
-          const store = useGameStore.getState();
           if (store.mode === 'driving') store.setMode('paused');
           else if (store.mode === 'paused') store.setMode('driving');
         }
+      } else if (store.gamepadConnected) {
+        // Gamepad was connected but is no longer readable — clear state
+        store.setGamepadConnected(false);
+        store.setInput({ steer: 0, throttle: 0, brake: false });
       }
 
       rafId = requestAnimationFrame(poll);
@@ -78,8 +72,8 @@ export function GamepadHandler() {
     rafId = requestAnimationFrame(poll);
     return () => {
       cancelAnimationFrame(rafId);
-      window.removeEventListener('gamepadconnected', onConnected);
-      window.removeEventListener('gamepaddisconnected', onDisconnected);
+      window.removeEventListener('gamepadconnected', noop);
+      window.removeEventListener('gamepaddisconnected', noop);
     };
   }, []);
 
