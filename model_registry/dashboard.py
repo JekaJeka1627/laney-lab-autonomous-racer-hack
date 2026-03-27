@@ -16,11 +16,13 @@ import urllib.request
 from datetime import datetime
 from pathlib import Path
 import streamlit as st
+import streamlit.components.v1 as components
 
 # Ensure model_registry is importable
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from model_registry.registry_core import ModelEntry, list_models, get_model, load_registry
+import model_registry.switcher as switcher_mod
 from model_registry.switcher import (
     get_active_model_id,
     get_active_model_info,
@@ -47,11 +49,38 @@ st.set_page_config(
 def get_runtime_status() -> dict | None:
     """Try to fetch vehicle runtime status."""
     try:
-        req = urllib.request.Request(f"{VEHICLE_RUNTIME_URL}/status", method="GET")
+        req = urllib.request.Request(f"{runtime_base_url}/status", method="GET")
         with urllib.request.urlopen(req, timeout=2) as resp:
             return json.loads(resp.read().decode())
     except Exception:
         return None
+
+
+def runtime_get_json(path: str) -> dict | None:
+    try:
+        req = urllib.request.Request(f"{runtime_base_url}{path}", method="GET")
+        with urllib.request.urlopen(req, timeout=3) as resp:
+            return json.loads(resp.read().decode())
+    except Exception:
+        return None
+
+
+def runtime_post_json(path: str, payload: dict | None = None) -> dict | None:
+    try:
+        data = b""
+        headers = {}
+        if payload is not None:
+            data = json.dumps(payload).encode()
+            headers["Content-Type"] = "application/json"
+        req = urllib.request.Request(f"{runtime_base_url}{path}", method="POST", data=data, headers=headers)
+        with urllib.request.urlopen(req, timeout=4) as resp:
+            return json.loads(resp.read().decode())
+    except Exception:
+        return None
+
+
+def get_runtime_camera_url() -> str:
+    return f"{runtime_base_url}/camera/latest.jpg?ts={int(time.time() * 1000)}"
 
 
 def format_action_space(model: ModelEntry) -> str:
@@ -64,26 +93,652 @@ def format_action_space(model: ModelEntry) -> str:
     return "N/A"
 
 
+def model_selector_label(model: ModelEntry) -> str:
+    return f"{model.id}  |  {model.display_name}"
+
+
+def model_drive_profile(model_id: str | None) -> str:
+    profiles = {
+        "sdc-navigator": "Stable",
+        "center-align": "Moderate",
+        "stay-on-track": "Aggressive",
+    }
+    return profiles.get(model_id or "", "Unknown")
+
+
+def runtime_mode_color(mode: str) -> str:
+    return {
+        "learned": "#29c46d",
+        "safe_stop": "#ffb020",
+        "manual_override": "#5bb6ff",
+    }.get(mode, "#7f8a96")
+
+
+def metric_value(value, *, fallback: str = "Unavailable"):
+    return fallback if value is None else value
+
+
+def metric_display(value, *, fallback: str = "Unavailable") -> str:
+    value = metric_value(value, fallback=fallback)
+    if isinstance(value, float):
+        if value.is_integer():
+            return str(int(value))
+        return f"{value:.3f}".rstrip("0").rstrip(".")
+    return str(value)
+
+
+def render_manual_pulse_controls() -> None:
+    st.caption("Bench-test controls for suspended wheel and steering checks.")
+    steer = st.slider("Steering", min_value=-1.0, max_value=1.0, value=0.0, step=0.1, key="manual_steer")
+    throttle = st.slider("Throttle", min_value=0.0, max_value=0.5, value=0.2, step=0.05, key="manual_throttle")
+    duration_ms = st.slider("Duration (ms)", min_value=200, max_value=2000, value=700, step=100, key="manual_duration")
+    pulse1, pulse2 = st.columns(2)
+    if pulse1.button("Pulse Forward", use_container_width=True, help="Sends a short manual throttle pulse immediately."):
+        result = runtime_post_json("/control/manual-override", {
+            "steering": steer,
+            "throttle": throttle,
+            "duration_ms": duration_ms,
+        })
+        if result and result.get("ok"):
+            runtime_post_json("/control/step")
+            st.success("Pulse sent")
+        else:
+            st.error("Pulse failed")
+    if pulse2.button("Pulse Neutral", use_container_width=True, help="Sends a short neutral command to stop throttle and center steering."):
+        result = runtime_post_json("/control/manual-override", {
+            "steering": 0.0,
+            "throttle": 0.0,
+            "duration_ms": max(500, duration_ms),
+        })
+        if result and result.get("ok"):
+            runtime_post_json("/control/step")
+            st.info("Centered")
+        else:
+            st.error("Stop failed")
+
+    st.divider()
+    st.caption("Steering linkage check. Keep the car suspended before running this.")
+    steer_cols = st.columns(3)
+    if steer_cols[0].button("Steer Left", use_container_width=True, help="Short left steering pulse, then center."):
+        result = runtime_post_json("/control/manual-override", {
+            "steering": -0.8,
+            "throttle": 0.0,
+            "duration_ms": 700,
+        })
+        if result and result.get("ok"):
+            runtime_post_json("/control/step?pulse_ms=700")
+            st.success("Left steering test sent")
+        else:
+            st.error("Steering test failed")
+    if steer_cols[1].button("Steer Right", use_container_width=True, help="Short right steering pulse, then center."):
+        result = runtime_post_json("/control/manual-override", {
+            "steering": 0.8,
+            "throttle": 0.0,
+            "duration_ms": 700,
+        })
+        if result and result.get("ok"):
+            runtime_post_json("/control/step?pulse_ms=700")
+            st.success("Right steering test sent")
+        else:
+            st.error("Steering test failed")
+    if steer_cols[2].button("Steer Center", use_container_width=True, help="Center steering immediately."):
+        result = runtime_post_json("/control/manual-override", {
+            "steering": 0.0,
+            "throttle": 0.0,
+            "duration_ms": 700,
+        })
+        if result and result.get("ok"):
+            runtime_post_json("/control/step?pulse_ms=700")
+            st.info("Steering centered")
+        else:
+            st.error("Centering failed")
+
+
+THEME_PRESETS = {
+    "Track Night": {
+        "bg": "#0a0a0f",
+        "panel": "#111118",
+        "panel_alt": "#151520",
+        "border": "#2a2a3a",
+        "text": "#ffffff",
+        "muted": "#94a3b8",
+        "green": "#00e676",
+        "green_bg": "#1e2a1e",
+        "green_border": "#00c853",
+        "yellow": "#ffd600",
+        "yellow_bg": "#2a2410",
+        "yellow_text": "#fff0a6",
+        "red": "#ff1744",
+        "red_bg": "#2a1e1e",
+        "callout": "#0d2618",
+        "callout_text": "#e0ffe0",
+        "accent": "#00e676",
+        "glow": "0 0 24px rgba(0,230,118,0.28)",
+    },
+    "Pit Blue": {
+        "bg": "#07111f",
+        "panel": "#0d1829",
+        "panel_alt": "#11203a",
+        "border": "#224166",
+        "text": "#ffffff",
+        "muted": "#9bb6d1",
+        "green": "#4dffb8",
+        "green_bg": "#0d2f26",
+        "green_border": "#29d18f",
+        "yellow": "#ffd54a",
+        "yellow_bg": "#33270a",
+        "yellow_text": "#fff4c4",
+        "red": "#ff4d6d",
+        "red_bg": "#341521",
+        "callout": "#103227",
+        "callout_text": "#e6fff6",
+        "accent": "#4dffb8",
+        "glow": "0 0 24px rgba(77,255,184,0.28)",
+    },
+    "Solar Track": {
+        "bg": "#090909",
+        "panel": "#14120d",
+        "panel_alt": "#1c1911",
+        "border": "#4d3f21",
+        "text": "#fffdf7",
+        "muted": "#c2b59b",
+        "green": "#b7ff00",
+        "green_bg": "#1d2805",
+        "green_border": "#98d100",
+        "yellow": "#ffe600",
+        "yellow_bg": "#332b00",
+        "yellow_text": "#fff7bf",
+        "red": "#ff3d00",
+        "red_bg": "#36160a",
+        "callout": "#20270b",
+        "callout_text": "#f6ffd1",
+        "accent": "#ffe600",
+        "glow": "0 0 24px rgba(255,230,0,0.28)",
+    },
+    "Banker": {
+        "bg": "#022e33",
+        "panel": "rgba(255,255,255,0.05)",
+        "panel_alt": "#0c3a40",
+        "border": "#1e5b63",
+        "text": "#ffffff",
+        "muted": "#a9d3d8",
+        "green": "#ff6a00",
+        "green_bg": "#16373c",
+        "green_border": "#ff6a00",
+        "yellow": "#ff9a3d",
+        "yellow_bg": "#2d2416",
+        "yellow_text": "#ffe2c7",
+        "red": "#ff6a00",
+        "red_bg": "#321d12",
+        "callout": "rgba(255,255,255,0.05)",
+        "callout_text": "#fff2e8",
+        "accent": "#ff6a00",
+        "glow": "0 0 24px rgba(255,106,0,0.45)",
+    },
+    "Solar Teal Workspace": {
+        "bg": "#002b36",
+        "panel": "#00212b",
+        "panel_alt": "#0a2f39",
+        "border": "#133d42",
+        "text": "#c0c0c0",
+        "muted": "#809090",
+        "green": "#507000",
+        "green_bg": "#1d2d10",
+        "green_border": "#507000",
+        "yellow": "#b08000",
+        "yellow_bg": "#2f2509",
+        "yellow_text": "#f0d59b",
+        "red": "#dc322f",
+        "red_bg": "#3a1716",
+        "callout": "#0a2f39",
+        "callout_text": "#d9d2bc",
+        "accent": "#b08000",
+        "glow": "0 0 24px rgba(176,128,0,0.42)",
+    },
+}
+
+selected_theme = st.session_state.setdefault("theme_preset", "Track Night")
+palette = THEME_PRESETS.get(selected_theme, THEME_PRESETS["Track Night"])
+st.session_state.setdefault("show_live_metrics", True)
+st.session_state.setdefault("show_live_tag", False)
+st.session_state.setdefault("camera_collapsed", False)
+
+
+def model_is_runnable(model: ModelEntry) -> bool:
+    if model.status == "archived":
+        return False
+    if model.id == "lars-physical-ppo":
+        return False
+    if not model.local_path:
+        return False
+    model_path = Path(model.local_path)
+    if not model_path.is_absolute():
+        model_path = Path(__file__).resolve().parent / model.local_path
+    if not model_path.exists():
+        return False
+    if model.format == "tensorflow-pb":
+        return (model_path / "agent" / "model.pb").exists() and (model_path / "model_metadata.json").exists()
+    if model.format == "python-runtime":
+        return model_path.exists()
+    return True
+
+
+st.markdown(
+    f"""
+    <style>
+    :root {{
+        --laney-bg: {palette["bg"]};
+        --laney-panel: {palette["panel"]};
+        --laney-panel-alt: {palette["panel_alt"]};
+        --laney-border: {palette["border"]};
+        --laney-text: {palette["text"]};
+        --laney-muted: {palette["muted"]};
+        --laney-green: {palette["green"]};
+        --laney-green-bg: {palette["green_bg"]};
+        --laney-green-border: {palette["green_border"]};
+        --laney-yellow: {palette["yellow"]};
+        --laney-yellow-bg: {palette["yellow_bg"]};
+        --laney-yellow-text: {palette["yellow_text"]};
+        --laney-red: {palette["red"]};
+        --laney-red-bg: {palette["red_bg"]};
+        --laney-callout: {palette["callout"]};
+        --laney-callout-text: {palette["callout_text"]};
+        --laney-accent: {palette["accent"]};
+        --laney-glow: {palette["glow"]};
+    }}
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+st.markdown(
+    """
+    <style>
+    [data-testid="stAppViewContainer"],
+    [data-testid="stHeader"],
+    [data-testid="stMain"],
+    .stApp,
+    body {
+        background: var(--laney-bg) !important;
+        color: var(--laney-text) !important;
+    }
+    [data-testid="stSidebar"] {
+        background: var(--laney-bg) !important;
+        border-right: 1px solid var(--laney-border);
+    }
+    [data-testid="stSidebarContent"] {
+        padding-top: 1rem !important;
+    }
+    [data-testid="stSidebar"] * {
+        color: var(--laney-text);
+    }
+    [data-testid="stSidebar"] .stCaption,
+    [data-testid="stSidebar"] label,
+    [data-testid="stSidebar"] .stMarkdown,
+    [data-testid="stSidebar"] p {
+        color: var(--laney-muted) !important;
+    }
+    [data-testid="stSidebar"] .stSelectbox div[data-baseweb="select"] > div,
+    [data-testid="stSidebar"] .stTextInput input {
+        background: var(--laney-panel) !important;
+        border: 1px solid var(--laney-border) !important;
+        color: var(--laney-text) !important;
+    }
+    .block-container {
+        padding-top: 0.45rem;
+        padding-bottom: 2rem;
+    }
+    .laney-topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-bottom: 0.6rem;
+    }
+    .laney-appname {
+        color: var(--laney-text);
+        font-size: 1.15rem;
+        line-height: 1.1;
+        font-weight: 800;
+        letter-spacing: 0.02em;
+    }
+    .laney-appsub {
+        color: var(--laney-muted);
+        font-size: 0.82rem;
+        margin-top: 0.15rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        font-weight: 700;
+    }
+    .laney-sidebar-status {
+        background: var(--laney-panel-alt);
+        border: 1px solid var(--laney-accent);
+        border-radius: 16px;
+        padding: 0.9rem 1rem;
+        margin: 0.5rem 0 0.75rem 0;
+        box-shadow: var(--laney-glow);
+    }
+    .laney-sidebar-status .label {
+        color: var(--laney-muted);
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        font-weight: 700;
+    }
+    .laney-sidebar-status .value {
+        color: var(--laney-text);
+        font-size: 1.08rem;
+        font-weight: 800;
+        margin-top: 0.25rem;
+    }
+    .laney-sidebar-status .meta {
+        color: var(--laney-accent);
+        font-size: 0.82rem;
+        font-weight: 700;
+        margin-top: 0.35rem;
+    }
+    .laney-shell {
+        background: var(--laney-panel);
+        border: 1px solid var(--laney-border);
+        border-radius: 24px;
+        padding: 18px 20px 16px 20px;
+        margin-bottom: 1rem;
+        box-shadow: 0 16px 48px rgba(0,0,0,0.38);
+    }
+    .laney-kicker {
+        color: var(--laney-muted);
+        font-size: 0.78rem;
+        letter-spacing: 0.12em;
+        font-weight: 700;
+        text-transform: uppercase;
+        margin-bottom: 0.35rem;
+    }
+    .laney-title {
+        color: var(--laney-text);
+        font-size: 2rem;
+        line-height: 1.05;
+        font-weight: 700;
+        margin: 0;
+    }
+    .laney-subtitle {
+        color: var(--laney-muted);
+        font-size: 0.98rem;
+        margin-top: 0.4rem;
+    }
+    .laney-statusbar {
+        display: flex;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+        margin-top: 1rem;
+    }
+    .laney-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        border-radius: 999px;
+        padding: 0.45rem 0.8rem;
+        background: var(--laney-panel);
+        color: var(--laney-text);
+        font-size: 0.88rem;
+        border: 1px solid var(--laney-border);
+        font-weight: 700;
+        box-shadow: inset 0 0 0 1px rgba(255,255,255,0.02);
+    }
+    .laney-chip.connected {
+        background: var(--laney-green-bg);
+        border-color: var(--laney-green-border);
+        color: var(--laney-green);
+        box-shadow: var(--laney-glow);
+    }
+    .laney-chip.error {
+        background: var(--laney-red-bg);
+        border-color: var(--laney-red);
+        color: var(--laney-red);
+        box-shadow: 0 0 18px rgba(255,23,68,0.18);
+    }
+    .laney-chip.neutral {
+        background: var(--laney-panel);
+        color: var(--laney-text);
+    }
+    .laney-dot {
+        width: 0.6rem;
+        height: 0.6rem;
+        border-radius: 999px;
+        display: inline-block;
+    }
+    .laney-callout {
+        border-radius: 18px;
+        padding: 0.95rem 1rem;
+        margin-bottom: 0.9rem;
+        border: 1px solid var(--laney-border);
+    }
+    .laney-callout.warn {
+        background: var(--laney-yellow-bg);
+        color: var(--laney-yellow-text);
+        border-color: var(--laney-yellow);
+        font-weight: 600;
+    }
+    .laney-callout.good {
+        background: var(--laney-callout);
+        color: var(--laney-callout-text);
+        border-color: var(--laney-green-border);
+        font-weight: 600;
+    }
+    .laney-callout .cta {
+        display: block;
+        margin-top: 0.35rem;
+        color: var(--laney-text);
+        font-weight: 600;
+    }
+    .laney-camera-wrap {
+        position: relative;
+        background: var(--laney-panel);
+        border: 1px solid var(--laney-border);
+        border-radius: 22px;
+        overflow: hidden;
+        margin-bottom: 0.9rem;
+        box-shadow: var(--laney-glow);
+    }
+    .laney-camera-sticky {
+        position: sticky;
+        top: 0;
+        z-index: 40;
+    }
+    .laney-camera-bar {
+        background: var(--laney-panel);
+        border: 1px solid var(--laney-border);
+        border-radius: 16px;
+        padding: 0.5rem 0.9rem;
+        margin-bottom: 0.45rem;
+        box-shadow: 0 10px 24px rgba(0,0,0,0.2);
+    }
+    .laney-camera-bar .title {
+        color: var(--laney-text);
+        font-size: 0.92rem;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+    }
+    .laney-camera-tag {
+        position: absolute;
+        top: 14px;
+        left: 14px;
+        z-index: 2;
+        background: var(--laney-bg);
+        color: var(--laney-text);
+        border: 1px solid var(--laney-border);
+        border-radius: 999px;
+        padding: 0.4rem 0.75rem;
+        font-size: 0.75rem;
+        letter-spacing: 0.12em;
+        font-weight: 800;
+        text-transform: uppercase;
+        text-shadow: 0 0 12px rgba(255,106,0,0.35);
+        box-shadow: var(--laney-glow);
+    }
+    .laney-metric-grid {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+    }
+    .laney-metric-card {
+        background: var(--laney-panel);
+        border: 1px solid var(--laney-border);
+        border-radius: 18px;
+        padding: 0.9rem 1rem;
+        box-shadow: 0 12px 32px rgba(0,0,0,0.22);
+    }
+    .laney-metric-label {
+        font-size: 0.85rem;
+        color: var(--laney-muted);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        font-weight: 700;
+    }
+    .laney-metric-value {
+        font-size: 2rem;
+        line-height: 1.05;
+        color: var(--laney-text);
+        font-weight: 800;
+        margin-top: 0.35rem;
+        word-break: break-word;
+        text-shadow: 0 0 10px rgba(255,106,0,0.22);
+    }
+    .laney-control-shell {
+        background: var(--laney-panel);
+        border: 1px solid var(--laney-border);
+        border-radius: 18px;
+        padding: 1rem;
+        height: 100%;
+        box-shadow: 0 12px 32px rgba(0,0,0,0.24);
+    }
+    h1, h2, h3, h4, h5, h6, [data-testid="stMarkdownContainer"] h1, [data-testid="stMarkdownContainer"] h2, [data-testid="stMarkdownContainer"] h3 {
+        color: var(--laney-text) !important;
+        font-weight: 700 !important;
+        font-family: "Segoe UI", Inter, "Helvetica Neue", Arial, sans-serif !important;
+    }
+    p, li, label, [data-testid="stCaptionContainer"], .stCaption {
+        color: var(--laney-muted) !important;
+        opacity: 1 !important;
+        font-family: "Segoe UI", Inter, "Helvetica Neue", Arial, sans-serif !important;
+    }
+    code, pre, .stCodeBlock, .stCode, kbd {
+        font-family: "JetBrains Mono", Consolas, "Courier New", monospace !important;
+    }
+    .stButton button {
+        border-radius: 10px !important;
+        min-height: 2.8rem;
+        font-size: 1rem !important;
+        font-weight: 700 !important;
+        border: 1px solid var(--laney-border) !important;
+        background: var(--laney-panel-alt) !important;
+        color: var(--laney-text) !important;
+        box-shadow: 0 10px 24px rgba(0,0,0,0.22) !important;
+    }
+    .stButton button[kind="primary"] {
+        background: var(--laney-accent) !important;
+        border-color: var(--laney-accent) !important;
+        color: var(--laney-text) !important;
+        box-shadow: var(--laney-glow) !important;
+    }
+    .stButton button:hover {
+        border-color: var(--laney-accent) !important;
+        box-shadow: var(--laney-glow) !important;
+    }
+    div[data-testid="column"]:nth-of-type(2) .stButton button {
+        border-color: var(--laney-accent) !important;
+    }
+    .stSlider [data-baseweb="slider"] {
+        padding-top: 0.4rem;
+    }
+    div[data-testid="stPopover"] > button {
+        min-height: 3rem !important;
+        min-width: 10rem !important;
+        font-size: 1rem !important;
+        font-weight: 800 !important;
+        border-radius: 999px !important;
+        background: var(--laney-accent) !important;
+        color: var(--laney-text) !important;
+        border: 1px solid var(--laney-accent) !important;
+        box-shadow: var(--laney-glow) !important;
+        padding: 0.55rem 1.1rem !important;
+        white-space: nowrap !important;
+    }
+    div[data-testid="stPopover"] > button:hover {
+        filter: brightness(1.05);
+        transform: translateY(-1px);
+    }
+    @media (max-width: 1100px) {
+        .laney-metric-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+
 # ---------------------------------------------------------------------------
 # Sidebar -- Model Selector
 # ---------------------------------------------------------------------------
 
-st.sidebar.title("Model Registry")
+st.sidebar.title("Live Ops")
 
 active_id = get_active_model_id()
-models = list_models(include_archived=False)
+all_models = list_models(include_archived=False)
+models = [m for m in all_models if model_is_runnable(m)]
 
 if not models:
-    st.sidebar.warning("No models registered.")
+    st.sidebar.warning("No runnable models available.")
     st.stop()
 
-model_options = {m.id: f"{m.display_name} ({m.source_type})" for m in models}
+model_options = {m.id: model_selector_label(m) for m in models}
+
+sidebar_runtime_url = st.sidebar.text_input("Runtime URL", value=VEHICLE_RUNTIME_URL, key="runtime_url")
+VEHICLE_RUNTIME_URL = sidebar_runtime_url
+switcher_mod.VEHICLE_RUNTIME_URL = sidebar_runtime_url
+runtime_base_url = sidebar_runtime_url
+runtime = get_runtime_status()
+
+estop_sidebar, stop_sidebar = st.sidebar.columns(2)
+if estop_sidebar.button("E-Stop", type="primary", use_container_width=True):
+    result = runtime_post_json("/control/estop")
+    if result and result.get("ok"):
+        st.sidebar.error("Emergency stop engaged.")
+        st.rerun()
+    else:
+        st.sidebar.error("E-Stop failed")
+if stop_sidebar.button("Center / Stop", use_container_width=True):
+    result = runtime_post_json("/control/manual-override", {
+        "steering": 0.0,
+        "throttle": 0.0,
+        "duration_ms": 700,
+    })
+    if result and result.get("ok"):
+        runtime_post_json("/control/step")
+        st.sidebar.warning("Vehicle centered and neutralized.")
+        st.rerun()
+    else:
+        st.sidebar.error("Stop failed")
 
 # Show active model prominently
 if active_id and active_id in model_options:
-    st.sidebar.success(f"Active: {model_options[active_id]}")
+    active_model = get_model(active_id)
+    st.sidebar.markdown(
+        f"""
+        <div class="laney-sidebar-status">
+          <div class="label">Active Model</div>
+          <div class="value">{active_model.display_name if active_model else active_id}</div>
+          <div class="meta">Drive Profile: {model_drive_profile(active_id)}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 else:
-    st.sidebar.info("No active model set")
+    st.sidebar.warning("No active model selected.")
+    st.sidebar.caption("Select a model below, then click Set as Active Model.")
 
 selected_id = st.sidebar.selectbox(
     "Select a model",
@@ -213,19 +868,14 @@ if selected_id:
                     if eval.get("notes"):
                         st.markdown(f"  - *{eval['notes']}*")
 
-# Vehicle runtime status
 st.sidebar.markdown("---")
 st.sidebar.subheader("Vehicle Runtime")
-runtime = get_runtime_status()
 if runtime:
     mode = runtime.get("control_mode", "unknown")
     model_ver = runtime.get("loaded_model_version", "none")
     loop = runtime.get("loop_count", 0)
 
-    mode_colors = {"learned": "green", "safe_stop": "orange", "manual_override": "blue"}
-    color = mode_colors.get(mode, "gray")
-
-    st.sidebar.markdown(f"Status: **:{color}[{mode}]**")
+    st.sidebar.markdown(f"Status: **{mode.replace('_', ' ').title()}**")
     st.sidebar.caption(f"Loaded: {model_ver}")
     st.sidebar.caption(f"Loop count: {loop}")
 
@@ -235,37 +885,212 @@ if runtime:
     col1, col2 = st.sidebar.columns(2)
     if col1.button("Reload Model", use_container_width=True):
         try:
-            req = urllib.request.Request(f"{VEHICLE_RUNTIME_URL}/model/reload", method="POST", data=b"")
-            urllib.request.urlopen(req, timeout=3)
+            runtime_post_json("/model/reload")
             st.sidebar.success("Reload triggered")
             st.rerun()
         except Exception:
             st.sidebar.error("Failed to reach runtime")
-    if col2.button("E-Stop", use_container_width=True):
+    if col2.button("Refresh Status", use_container_width=True):
         try:
-            req = urllib.request.Request(f"{VEHICLE_RUNTIME_URL}/control/estop", method="POST", data=b"")
-            urllib.request.urlopen(req, timeout=3)
-            st.sidebar.warning("E-STOP engaged")
             st.rerun()
         except Exception:
-            st.sidebar.error("Failed to reach runtime")
+            st.sidebar.error("Refresh failed")
 else:
-    st.sidebar.caption("Runtime not reachable")
-    st.sidebar.caption(f"Expected at: {VEHICLE_RUNTIME_URL}")
+    st.sidebar.error("Runtime not reachable")
+    st.sidebar.caption(f"Expected at: {runtime_base_url}")
+
+camera_refresh_ms = st.session_state.get("camera_refresh_ms", 750)
+
+camera_header_left, camera_header_right = st.columns([9, 2])
+with camera_header_left:
+    st.markdown(
+        """
+        <div class="laney-topbar">
+          <div>
+            <div class="laney-appname">DeepRacer Model Registry</div>
+            <div class="laney-appsub">Live operator workspace</div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+with camera_header_right:
+    if hasattr(st, "popover"):
+        with st.popover("Settings", help="Camera and display settings"):
+            st.selectbox(
+                "Theme",
+                options=list(THEME_PRESETS.keys()),
+                key="theme_preset",
+                help="Switch the dashboard color preset.",
+            )
+            st.slider(
+                "Camera Refresh (ms)",
+                min_value=250,
+                max_value=3000,
+                value=750,
+                step=250,
+                key="camera_refresh_ms",
+                help="Lower = more responsive, higher = less bandwidth.",
+            )
+            st.checkbox("Show telemetry cards", value=True, key="show_live_metrics")
+            st.checkbox("Show LIVE FEED tag", value=True, key="show_live_tag")
+            if st.button("Reset Camera Feed", type="primary", use_container_width=True, key="camera_reset_button_popover"):
+                result = runtime_post_json("/camera/reset")
+                if result and result.get("ok"):
+                    st.success("Camera reset triggered.")
+                    st.rerun()
+                else:
+                    st.error("Camera reset failed")
+            st.divider()
+            st.subheader("Manual Pulse")
+            render_manual_pulse_controls()
+    else:
+        with st.expander("Settings", expanded=False):
+            st.selectbox("Theme", options=list(THEME_PRESETS.keys()), key="theme_preset")
+            st.slider(
+                "Camera Refresh (ms)",
+                min_value=250,
+                max_value=3000,
+                value=750,
+                step=250,
+                key="camera_refresh_ms",
+            )
+            st.checkbox("Show telemetry cards", value=True, key="show_live_metrics")
+            st.checkbox("Show LIVE FEED tag", value=True, key="show_live_tag")
+            st.divider()
+            st.subheader("Manual Pulse")
+            render_manual_pulse_controls()
+
+if runtime:
+    with st.container():
+        st.markdown('<div class="laney-camera-sticky">', unsafe_allow_html=True)
+        camera_bar_left, camera_bar_right = st.columns([10, 1])
+        with camera_bar_left:
+            st.markdown('<div class="laney-camera-bar"><div class="title">Camera</div></div>', unsafe_allow_html=True)
+        with camera_bar_right:
+            chevron = "▼" if st.session_state.get("camera_collapsed", False) else "▲"
+            if st.button(chevron, key="camera_toggle_button", help="Collapse or expand the sticky camera panel."):
+                st.session_state["camera_collapsed"] = not st.session_state.get("camera_collapsed", False)
+                st.rerun()
+
+        if not st.session_state.get("camera_collapsed", False):
+            stream_key = f"camera-frame-{camera_refresh_ms}-{int(time.time())}"
+            components.html(
+                f"""
+                <div class="laney-camera-wrap">
+                  {"<div class=\"laney-camera-tag\">Live Feed</div>" if st.session_state.get("show_live_tag", True) else ""}
+                  <form id="{stream_key}-reset-form" action="{runtime_base_url}/camera/reset" method="post" target="{stream_key}-reset-target" style="position:absolute;right:16px;bottom:16px;margin:0;z-index:4;">
+                    <button type="submit"
+                            style="background:#ff1744;color:#ffffff;border:1px solid #ff1744;border-radius:10px;padding:0.7rem 0.95rem;font-size:0.95rem;font-weight:800;cursor:pointer;box-shadow:0 8px 24px rgba(0,0,0,0.35);">
+                      Reset Camera
+                    </button>
+                  </form>
+                  <iframe name="{stream_key}-reset-target" style="display:none;"></iframe>
+                  <img id="{stream_key}" src="{runtime_base_url}/camera/latest.jpg?ts={int(time.time()*1000)}"
+                       style="width:100%;height:460px;display:block;object-fit:cover;background:#0a0a0f;" />
+                  <script>
+                    const img = document.getElementById("{stream_key}");
+                    const form = document.getElementById("{stream_key}-reset-form");
+                    form.addEventListener("submit", () => {{
+                      setTimeout(() => {{
+                        img.src = "{runtime_base_url}/camera/latest.jpg?ts=" + Date.now();
+                      }}, 350);
+                    }});
+                    setInterval(() => {{
+                      img.src = "{runtime_base_url}/camera/latest.jpg?ts=" + Date.now();
+                    }}, {camera_refresh_ms});
+                  </script>
+                </div>
+                """,
+                height=480,
+            )
+        st.markdown('</div>', unsafe_allow_html=True)
+else:
+    st.caption("Camera feed requires an active vehicle runtime connection.")
+
+if st.session_state.get("show_live_metrics", True):
+    st.markdown(
+        f"""
+        <div class="laney-metric-grid">
+          <div class="laney-metric-card"><div class="laney-metric-label">Mode</div><div class="laney-metric-value">{runtime.get("control_mode", "unknown").replace("_", " ").title() if runtime else "Offline"}</div></div>
+          <div class="laney-metric-card"><div class="laney-metric-label">Loop Count</div><div class="laney-metric-value">{metric_display(runtime.get("loop_count", 0) if runtime else 0, fallback='0')}</div></div>
+          <div class="laney-metric-card"><div class="laney-metric-label">Throttle</div><div class="laney-metric-value">{metric_display(runtime.get("last_throttle") if runtime else 0, fallback='0')}</div></div>
+          <div class="laney-metric-card"><div class="laney-metric-label">Steering</div><div class="laney-metric-value">{metric_display(runtime.get("last_steering") if runtime else 0, fallback='0')}</div></div>
+          <div class="laney-metric-card"><div class="laney-metric-label">Battery</div><div class="laney-metric-value">{(metric_display(runtime.get("battery_percent"), fallback='Unavailable') + '%') if runtime and runtime.get("battery_percent") is not None else 'Unavailable'}</div></div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+with st.container():
+    st.markdown('<div class="laney-control-shell">', unsafe_allow_html=True)
+    st.subheader("Basic Loop Controls")
+    st.caption("Use these for autonomous model execution.")
+    op1, op2 = st.columns(2)
+    if op1.button(
+        "Start Autonomous Driving",
+        use_container_width=True,
+        help="Starts the autonomous control loop. Requires an active loaded model to actually drive.",
+    ):
+        result = runtime_post_json("/control/start")
+        if result and result.get("ok"):
+            st.success("Loop started")
+        else:
+            st.error("Start failed")
+    if op2.button(
+        "Stop Autonomous Driving",
+        use_container_width=True,
+        help="Stops the autonomous control loop and returns the runtime to safe stop.",
+    ):
+        result = runtime_post_json("/control/stop")
+        if result and result.get("ok"):
+            st.warning("Loop stopped")
+        else:
+            st.error("Stop failed")
+
+    estop_main, center_main = st.columns(2)
+    if estop_main.button(
+        "Emergency Stop",
+        type="primary",
+        use_container_width=True,
+        help="Immediate stop. Cuts motion and forces the runtime into emergency-stop state.",
+    ):
+        result = runtime_post_json("/control/estop")
+        if result and result.get("ok"):
+            st.error("Emergency stop engaged.")
+            st.rerun()
+        else:
+            st.error("E-Stop failed")
+    if center_main.button(
+        "Center / Stop",
+        use_container_width=True,
+        help="Sends a short neutral command to center steering and stop throttle.",
+    ):
+        result = runtime_post_json("/control/manual-override", {
+            "steering": 0.0,
+            "throttle": 0.0,
+            "duration_ms": 700,
+        })
+        if result and result.get("ok"):
+            runtime_post_json("/control/step")
+            st.info("Vehicle centered and neutralized.")
+        else:
+            st.error("Stop failed")
+    st.markdown("</div>", unsafe_allow_html=True)
 
 
 # ---------------------------------------------------------------------------
 # Main content -- Tabs
 # ---------------------------------------------------------------------------
 
-tab_details, tab_compare, tab_premap, tab_explorer, tab_history, tab_all = st.tabs([
-    "Model Details", "Performance Comparison", "Pre-Mapping", "Explorer Controls", "Switch History", "All Models"
+tab_live_models, tab_premap, tab_explorer, tab_compare, tab_history, tab_all = st.tabs([
+    "Models", "Pre-Mapping", "Explorer", "Performance", "History", "All Models"
 ])
 
 # ---------------------------------------------------------------------------
 # Tab: Model Details
 # ---------------------------------------------------------------------------
-with tab_details:
+with tab_live_models:
     model = get_model(selected_id)
     if not model:
         st.error(f"Model '{selected_id}' not found")
@@ -685,6 +1510,7 @@ with tab_explorer:
             return None
 
     explorer_status = get_explorer_status()
+    explorer_files = runtime_get_json("/explorer/state/files") or {"files": []}
 
     if explorer_status:
         mode = explorer_status.get("mode", "UNKNOWN")
@@ -732,6 +1558,43 @@ with tab_explorer:
         s12.metric("Inference", backend_name)
     else:
         st.info("Explorer not running. Use the controls below to start a mission.")
+
+    st.markdown("---")
+
+    st.subheader("Saved Explorer State")
+    state_cols = st.columns([1, 1, 2])
+    with state_cols[0]:
+        if st.button("Resume Saved Map", use_container_width=True, help="Load the last saved explorer map and trail into memory."):
+            result = runtime_post_json("/explorer/state/load")
+            if result and result.get("success"):
+                st.success("Saved explorer state loaded.")
+                st.rerun()
+            else:
+                st.error((result or {}).get("error", "No saved explorer state found"))
+    with state_cols[1]:
+        if st.button("Save Map Now", use_container_width=True, help="Persist the current explorer map and trail to disk."):
+            result = runtime_post_json("/explorer/map-save")
+            if result and result.get("success"):
+                st.success("Explorer map saved.")
+                st.rerun()
+            else:
+                st.error((result or {}).get("error", "Failed to save explorer map"))
+    with state_cols[2]:
+        files = explorer_files.get("files", [])
+        if files:
+            latest_names = ", ".join(f["name"] for f in files)
+            st.caption(f"Saved artifacts: {latest_names}")
+        else:
+            st.caption("No saved explorer artifacts yet.")
+
+    files = explorer_files.get("files", [])
+    if files:
+        download_cols = st.columns(max(1, min(3, len(files))))
+        for idx, file_info in enumerate(files[:3]):
+            with download_cols[idx]:
+                filename = file_info["name"]
+                download_url = f"{VEHICLE_RUNTIME_URL}/explorer/state/download/{filename}"
+                st.link_button(f"Download {filename}", download_url, use_container_width=True)
 
     st.markdown("---")
 
@@ -1244,7 +2107,7 @@ with tab_explorer:
                 st.error("Failed to get re-exploration suggestions")
         
         # Auto-refresh logic
-        if auto_refresh and explorer_status and explorer_status.get("mode") == "exploring":
+        if auto_refresh and explorer_status and explorer_status.get("mode") == "EXPLORING":
             time.sleep(2)  # Wait 2 seconds before refresh
             st.rerun()
     else:
@@ -1255,7 +2118,7 @@ with tab_explorer:
         )
         
         # Still auto-refresh when no map but explorer is running
-        if explorer_status and explorer_status.get("mode") == "exploring":
+        if explorer_status and explorer_status.get("mode") == "EXPLORING":
             if st.checkbox("Auto-refresh while exploring", value=True, key="no_map_refresh"):
                 time.sleep(2)
                 st.rerun()

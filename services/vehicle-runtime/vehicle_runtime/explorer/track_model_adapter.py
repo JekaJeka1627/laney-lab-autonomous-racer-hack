@@ -194,7 +194,7 @@ class TrackModelAdapter:
     def _preprocess(self, frame: np.ndarray) -> np.ndarray:
         """Resize and normalize frame to match DeepRacer model input."""
         import cv2
-        h, w = _MODEL_INPUT_SIZE
+        h, w = self._expected_input_hw()
         resized = cv2.resize(frame, (w, h))
 
         grayscale = (self.info is not None and self.info.preprocess_type == "GREY_SCALE")
@@ -208,6 +208,24 @@ class TrackModelAdapter:
             arr = rgb.astype(np.float32) / 255.0
             # Shape: [1, H, W, 3]
             return arr[np.newaxis, :, :, :]
+
+    def _expected_input_hw(self) -> tuple[int, int]:
+        """Infer model input height/width from the loaded graph when possible."""
+        shape = None
+        if self._tf_input is not None and hasattr(self._tf_input, "shape"):
+            shape = self._tf_input.shape
+        elif self._ort_session is not None:
+            try:
+                shape = self._ort_session.get_inputs()[0].shape
+            except Exception:
+                shape = None
+
+        try:
+            if shape is not None and len(shape) >= 4:
+                return int(shape[1]), int(shape[2])
+        except Exception:
+            pass
+        return _MODEL_INPUT_SIZE
 
     # ------------------------------------------------------------------
     # Private: inference
@@ -263,6 +281,14 @@ class TrackModelAdapter:
             else:
                 steer_deg = float(flat[0]) * 30.0
                 speed_val = 1.0
+
+            # Many DeepRacer continuous frozen graphs emit normalized action values
+            # in roughly [-1, 1] rather than physical units. Detect that common case
+            # and map back into the metadata bounds.
+            if abs(steer_deg) <= 1.5 and abs(speed_val) <= 1.5:
+                steering = max(-1.0, min(1.0, steer_deg))
+                throttle = max(0.0, min(1.0, (speed_val + 1.0) / 2.0))
+                return steering, throttle
 
             smin = self.info.steering_min if self.info else -30.0
             smax = self.info.steering_max if self.info else 30.0
@@ -346,8 +372,9 @@ class TrackModelAdapter:
                 tf.import_graph_def(graph_def, name="")
 
             sess = tf.compat.v1.Session(graph=graph)
-            self._tf_input = graph.get_tensor_by_name(_INPUT_TENSOR)
-            self._tf_output = graph.get_tensor_by_name(_OUTPUT_TENSOR)
+            input_name, output_name = self._resolve_tensor_names(graph)
+            self._tf_input = graph.get_tensor_by_name(input_name)
+            self._tf_output = graph.get_tensor_by_name(output_name)
             self._tf_session = sess
             self._backend = "tensorflow"
             if self.info:
@@ -358,6 +385,38 @@ class TrackModelAdapter:
         except Exception:
             log.debug("TF load failed for %s", pb_path, exc_info=True)
         return False
+
+    def _resolve_tensor_names(self, graph) -> tuple[str, str]:
+        """Find the real input/output tensor names in a DeepRacer frozen graph."""
+        try:
+            graph.get_tensor_by_name(_INPUT_TENSOR)
+            graph.get_tensor_by_name(_OUTPUT_TENSOR)
+            return _INPUT_TENSOR, _OUTPUT_TENSOR
+        except Exception:
+            pass
+
+        input_candidates: list[str] = []
+        output_candidates: list[str] = []
+        for op in graph.get_operations():
+            name = op.name
+            if op.type == "Placeholder":
+                if "camera" in name.lower() or "observation" in name.lower():
+                    input_candidates.append(f"{name}:0")
+            if name.lower().endswith("/ppo_head_0/policy") or name.lower().endswith("/policy"):
+                output_candidates.append(f"{name}:0")
+
+        if not input_candidates:
+            input_candidates = [f"{op.name}:0" for op in graph.get_operations() if op.type == "Placeholder"]
+        if not output_candidates:
+            output_candidates = [
+                f"{op.name}:0"
+                for op in graph.get_operations()
+                if ("policy" in op.name.lower() or "softmax" in op.name.lower())
+            ]
+
+        if not input_candidates or not output_candidates:
+            raise KeyError("Unable to resolve DeepRacer graph input/output tensors")
+        return input_candidates[0], output_candidates[0]
 
     def close(self) -> None:
         if self._tf_session is not None:

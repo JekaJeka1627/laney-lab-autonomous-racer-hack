@@ -36,6 +36,19 @@ def find_onnx_file(model_dir: Path) -> Path | None:
     return None
 
 
+def find_pb_file(model_dir: Path) -> Path | None:
+    """Find a DeepRacer TensorFlow frozen graph within the model directory."""
+    if not model_dir.is_dir():
+        return None
+    candidates = sorted(model_dir.rglob("model.pb"))
+    if candidates:
+        return candidates[0]
+    pb_files = sorted(model_dir.rglob("*.pb"))
+    if pb_files:
+        return pb_files[0]
+    return None
+
+
 def read_marker(model_dir: Path) -> dict | None:
     """Read the active_model_marker.json if it exists."""
     marker_path = model_dir / MARKER_FILENAME
@@ -73,18 +86,24 @@ def resolve_local_model(model_dir: Path) -> dict | None:
     if not model_dir.is_dir():
         return None
 
-    onnx_path = find_onnx_file(model_dir)
-    if not onnx_path:
+    model_path = find_onnx_file(model_dir)
+    model_format = "onnx"
+    if not model_path:
+        model_path = find_pb_file(model_dir)
+        model_format = "tensorflow-pb"
+    if not model_path:
         return None
 
     marker = read_marker(model_dir) or {}
     model_id = marker.get("model_id", "local")
-    version = marker.get("version", str(int(onnx_path.stat().st_mtime)))
+    version = marker.get("version", str(int(model_path.stat().st_mtime)))
     deployed_at = marker.get("deployed_at", "")
-    display_name = marker.get("display_name", onnx_path.stem)
+    display_name = marker.get("display_name", model_path.stem)
 
     return {
-        "model_path": onnx_path,
+        "model_path": model_path,
+        "model_dir": model_dir,
+        "format": marker.get("format", model_format),
         "model_id": model_id,
         "model_version": f"{model_id}@{version}",
         "deployed_at": deployed_at,

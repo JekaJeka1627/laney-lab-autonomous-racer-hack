@@ -9,7 +9,7 @@ def _clamp(value: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, value))
 
 
-@dataclass(slots=True)
+@dataclass
 class SafetyPolicy:
     max_throttle: float
     steering_scale: float = 1.0
