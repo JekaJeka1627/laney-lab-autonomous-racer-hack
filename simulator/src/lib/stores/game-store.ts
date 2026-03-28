@@ -5,6 +5,8 @@
 import { create } from 'zustand';
 import { getStats } from '@/lib/data/training-data';
 
+const CONTROL_SCHEME_STORAGE_KEY = 'deepracer-control-scheme-v2';
+
 export interface CarState {
   x: number;
   z: number;
@@ -139,7 +141,7 @@ function detectDefaultControlScheme(): 'buttons' | 'tilt' {
 
 function loadControlScheme(): 'buttons' | 'tilt' {
   if (typeof window === 'undefined') return 'buttons';
-  const saved = localStorage.getItem('deepracer-control-scheme');
+  const saved = localStorage.getItem(CONTROL_SCHEME_STORAGE_KEY);
   if (saved === 'tilt' || saved === 'buttons') return saved;
   return detectDefaultControlScheme();
 }
@@ -195,7 +197,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   setControlScheme: (controlScheme) => {
     set({ controlScheme });
     if (typeof window !== 'undefined') {
-      localStorage.setItem('deepracer-control-scheme', controlScheme);
+      localStorage.setItem(CONTROL_SCHEME_STORAGE_KEY, controlScheme);
     }
   },
   analogSteer: 0,

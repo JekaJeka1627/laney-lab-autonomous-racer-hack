@@ -5,8 +5,8 @@ import { useGameStore } from '@/lib/stores/game-store';
 import { useDeviceOrientation } from '@/lib/hooks/useDeviceOrientation';
 import { useIsCoarsePointer } from '@/lib/hooks/useIsCoarsePointer';
 
-const STORAGE_KEY = 'deepracer-mobile-help-dismissed';
-const CONTROL_SCHEME_KEY = 'deepracer-control-scheme';
+const STORAGE_KEY = 'deepracer-mobile-help-dismissed-v2';
+const CONTROL_SCHEME_KEY = 'deepracer-control-scheme-v2';
 
 export function MobileDriveHelp() {
   const mode = useGameStore((s) => s.mode);
