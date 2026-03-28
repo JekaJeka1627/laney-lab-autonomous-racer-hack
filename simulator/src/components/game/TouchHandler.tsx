@@ -25,6 +25,7 @@ function clamp(v: number, min: number, max: number) {
 export function TouchHandler() {
   const [joystick, setJoystick] = useState<JoystickVisual | null>(null);
   const activeTouchId = useRef<number | null>(null);
+  const baseRef = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     function onTouchStart(e: TouchEvent) {
@@ -38,6 +39,7 @@ export function TouchHandler() {
 
       const touch = e.changedTouches[0];
       activeTouchId.current = touch.identifier;
+      baseRef.current = { x: touch.clientX, y: touch.clientY };
 
       useGameStore.getState().setActiveInputDevice('touch');
       useGameStore.getState().setInput({ steer: 0, throttle: 0, brake: false });
@@ -46,30 +48,27 @@ export function TouchHandler() {
     }
 
     function onTouchMove(e: TouchEvent) {
+      if (activeTouchId.current === null) return;
       const touch = Array.from(e.changedTouches).find(t => t.identifier === activeTouchId.current);
-      if (!touch) return;
+      if (!touch || !baseRef.current) return;
       e.preventDefault();
 
-      setJoystick(prev => {
-        if (!prev) return prev;
+      const base = baseRef.current;
+      const dx = touch.clientX - base.x;
+      const dy = touch.clientY - base.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const scale = dist > RADIUS ? RADIUS / dist : 1;
+      const cdx = dx * scale;
+      const cdy = dy * scale;
 
-        const dx = touch.clientX - prev.baseX;
-        const dy = touch.clientY - prev.baseY;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        const scale = dist > RADIUS ? RADIUS / dist : 1;
-        const cdx = dx * scale;
-        const cdy = dy * scale;
+      // Compute and write input outside the state updater to avoid setState-during-render
+      const steer = clamp(-cdx / RADIUS, -1, 1);
+      const throttle = cdy < 0 ? clamp(-cdy / RADIUS, 0, 1) : 0;
+      const brake = cdy > RADIUS * 0.3;
+      useGameStore.getState().setInput({ steer, throttle, brake });
 
-        // X → steer: drag right = steer right (negative in car convention)
-        const steer = clamp(-cdx / RADIUS, -1, 1);
-        // Y → throttle (drag up) / brake (drag down)
-        const throttle = cdy < 0 ? clamp(-cdy / RADIUS, 0, 1) : 0;
-        const brake = cdy > RADIUS * 0.3;
-
-        useGameStore.getState().setInput({ steer, throttle, brake });
-
-        return { ...prev, knobX: prev.baseX + cdx, knobY: prev.baseY + cdy };
-      });
+      // Update knob position separately
+      setJoystick(prev => prev ? { ...prev, knobX: base.x + cdx, knobY: base.y + cdy } : prev);
     }
 
     function onTouchEnd(e: TouchEvent) {
