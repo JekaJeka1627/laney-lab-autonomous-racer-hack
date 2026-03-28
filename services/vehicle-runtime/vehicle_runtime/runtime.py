@@ -4,18 +4,25 @@ import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from vehicle_runtime.actuators import Actuator, ControlCommand, build_actuator
 from vehicle_runtime.api_client import VehicleApiClient
-from vehicle_runtime.battery import BatteryMonitor, BatterySnapshot, MockBatteryMonitor
+from vehicle_runtime.battery import (
+    BatteryMonitor,
+    BatterySnapshot,
+    DeepRacerApiBatteryMonitor,
+    MockBatteryMonitor,
+)
 from vehicle_runtime.config import RuntimeConfig
 from vehicle_runtime.frame_sources import FrameSource, build_frame_source
-from vehicle_runtime.predictor import OnnxSteeringPredictor, SteeringPredictor
+from vehicle_runtime.local_model_loader import resolve_local_model
+from vehicle_runtime.predictor import OnnxSteeringPredictor, SteeringPredictor, TrackModelPredictor
 from vehicle_runtime.safety import SafetyPolicy
 from vehicle_runtime.session_logger import RunSessionLogger, SessionArtifacts
 
 
-@dataclass(slots=True)
+@dataclass
 class RuntimeSnapshot:
     running: bool = False
     estop: bool = False
@@ -67,13 +74,34 @@ class VehicleRuntime:
             backend=config.actuator_backend,
             serial_port=config.actuator_serial_port,
             serial_baudrate=config.actuator_serial_baudrate,
+            deepracer_gpio_enable=config.deepracer_gpio_enable,
+            deepracer_pwm_chip=config.deepracer_pwm_chip,
+            deepracer_throttle_channel=config.deepracer_throttle_channel,
+            deepracer_steering_channel=config.deepracer_steering_channel,
+            deepracer_throttle_neutral=config.deepracer_throttle_neutral,
+            deepracer_throttle_forward=config.deepracer_throttle_forward,
+            deepracer_throttle_reverse=config.deepracer_throttle_reverse,
+            deepracer_steering_center=config.deepracer_steering_center,
+            deepracer_steering_left=config.deepracer_steering_left,
+            deepracer_steering_right=config.deepracer_steering_right,
         )
         self._predictor_factory = predictor_factory or OnnxSteeringPredictor
         self._predictor: SteeringPredictor | None = None
         self._api = VehicleApiClient(config.api_base_url) if config.api_base_url else None
         self._cache_dir = config.cache_dir
         self._cache_dir.mkdir(parents=True, exist_ok=True)
-        self._battery = battery_monitor or MockBatteryMonitor()
+        if battery_monitor is not None:
+            self._battery = battery_monitor
+        elif config.battery_backend == "mock":
+            self._battery = MockBatteryMonitor()
+        elif config.battery_backend == "deepracer":
+            self._battery = DeepRacerApiBatteryMonitor(api_url=config.deepracer_battery_api_url)
+        elif config.battery_backend == "auto" and (
+            config.actuator_backend == "deepracer" or config.camera_backend == "deepracer_snapshot"
+        ):
+            self._battery = DeepRacerApiBatteryMonitor(api_url=config.deepracer_battery_api_url)
+        else:
+            self._battery = MockBatteryMonitor()
         self._last_battery = BatterySnapshot(voltage_v=None, percent=None, state="unknown")
         self._session_logger = RunSessionLogger(
             cache_dir=self._cache_dir,
@@ -84,14 +112,43 @@ class VehicleRuntime:
         )
         self._manual_override: ControlCommand | None = None
         self._manual_override_until: float | None = None
+        self._latest_frame_rgb: Any = None
+        self._active_model_dir = Path(".active-model")
+
+    def _refresh_battery_snapshot(self) -> None:
+        battery = self._battery.read()
+        self._last_battery = battery
+        self._snapshot.battery_percent = battery.percent
+        self._snapshot.battery_voltage_v = battery.voltage_v
+        self._snapshot.battery_state = battery.state
 
     def close(self) -> None:
         self.stop()
         self._frame_source.close()
+        if self._predictor is not None and hasattr(self._predictor, "close"):
+            try:
+                self._predictor.close()
+            except Exception:
+                pass
         self._actuator.close()
+
+    def reset_camera(self) -> None:
+        with self._lock:
+            try:
+                self._frame_source.close()
+            except Exception:
+                pass
+            self._frame_source = build_frame_source(
+                backend=self.config.camera_backend,
+                device_index=self.config.camera_device_index,
+                width=self.config.camera_width,
+                height=self.config.camera_height,
+            )
+            self._latest_frame_rgb = None
 
     def snapshot(self) -> RuntimeSnapshot:
         with self._lock:
+            self._refresh_battery_snapshot()
             return RuntimeSnapshot(
                 running=self._snapshot.running,
                 estop=self._snapshot.estop,
@@ -226,6 +283,21 @@ class VehicleRuntime:
     def step_once(self) -> ControlCommand:
         return self._tick()
 
+    def neutralize_output(self) -> None:
+        self._actuator.stop()
+
+    def latest_frame_rgb(self):
+        with self._lock:
+            if self._latest_frame_rgb is None:
+                return None
+            return self._latest_frame_rgb.copy()
+
+    def capture_frame_rgb(self):
+        frame = self._frame_source.read_rgb()
+        with self._lock:
+            self._latest_frame_rgb = frame.copy()
+        return frame.copy()
+
     def _run_loop(self) -> None:
         while not self._stop_event.is_set():
             self._tick()
@@ -252,6 +324,37 @@ class VehicleRuntime:
             self._snapshot.last_model_refresh_at = now
 
         try:
+            local_model = resolve_local_model(self._active_model_dir)
+            if local_model:
+                model_format = str(local_model.get("format", "")).lower()
+                model_version = str(local_model["model_version"])
+                with self._lock:
+                    self._snapshot.target_model_version = model_version
+                if not force and self._snapshot.loaded_model_version == model_version and self._predictor is not None:
+                    return
+
+                if self._predictor is not None and hasattr(self._predictor, "close"):
+                    try:
+                        self._predictor.close()
+                    except Exception:
+                        pass
+
+                if model_format == "onnx":
+                    self._predictor = self._predictor_factory(Path(local_model["model_path"]))
+                elif model_format == "tensorflow-pb":
+                    self._predictor = TrackModelPredictor(
+                        Path(local_model["model_dir"]),
+                        model_id=str(local_model.get("model_id", "")),
+                        display_name=str(local_model.get("display_name", "")),
+                    )
+                else:
+                    raise RuntimeError(f"Unsupported local model format: {model_format}")
+
+                with self._lock:
+                    self._snapshot.loaded_model_version = model_version
+                    self._snapshot.last_error = None
+                return
+
             target_version = self._resolve_target_model_version()
             with self._lock:
                 self._snapshot.target_model_version = target_version
@@ -266,6 +369,11 @@ class VehicleRuntime:
                 if not force and self._snapshot.loaded_model_version == target_version and self._predictor is not None:
                     return
 
+            if self._predictor is not None and hasattr(self._predictor, "close"):
+                try:
+                    self._predictor.close()
+                except Exception:
+                    pass
             if not self._api:
                 raise RuntimeError("VEHICLE_API_BASE_URL is required to download model artifacts")
             model_path = Path(self._cache_dir) / "models" / target_version / "model.onnx"
@@ -281,12 +389,8 @@ class VehicleRuntime:
 
     def _tick(self) -> ControlCommand:
         self._load_predictor(force=False)
-        battery = self._battery.read()
         with self._lock:
-            self._last_battery = battery
-            self._snapshot.battery_percent = battery.percent
-            self._snapshot.battery_voltage_v = battery.voltage_v
-            self._snapshot.battery_state = battery.state
+            self._refresh_battery_snapshot()
             now = self._time()
             override_active = (
                 self._manual_override is not None
@@ -311,7 +415,7 @@ class VehicleRuntime:
 
         if estop:
             command = self._safety.apply(0.0, 0.0, estop=True)
-            self._actuator.send(command)
+            self._actuator.stop()
             with self._lock:
                 self._snapshot.control_mode = "safe_stop"
                 self._snapshot.last_steering = command.steering
@@ -319,17 +423,30 @@ class VehicleRuntime:
                 self._snapshot.loop_count += 1
             return command
 
+        if manual_override is not None:
+            command = self._safety.apply(manual_override.steering, manual_override.throttle, estop=False)
+            self._actuator.send(command)
+            with self._lock:
+                self._snapshot.control_mode = "manual_override"
+                self._snapshot.last_steering = command.steering
+                self._snapshot.last_throttle = command.throttle
+                self._snapshot.last_error = None
+                self._snapshot.loop_count += 1
+            return command
+
         try:
             frame = self._frame_source.read_rgb()
-            if manual_override is not None:
-                command = self._safety.apply(manual_override.steering, manual_override.throttle, estop=False)
-                control_mode = "manual_override"
+            with self._lock:
+                self._latest_frame_rgb = frame.copy()
+            if self._predictor is None:
+                raise RuntimeError("Predictor not loaded")
+            if hasattr(self._predictor, "predict_control"):
+                steering, throttle = self._predictor.predict_control(frame)
             else:
-                if self._predictor is None:
-                    raise RuntimeError("Predictor not loaded")
                 steering = float(self._predictor.predict_steering(frame))
-                command = self._safety.apply(steering, self.config.default_throttle, estop=False)
-                control_mode = "learned"
+                throttle = self.config.default_throttle
+            command = self._safety.apply(float(steering), float(throttle), estop=False)
+            control_mode = "learned"
             self._actuator.send(command)
             if self._session_logger.active:
                 self._session_logger.record(frame_rgb=frame, command=command, control_mode=control_mode)
@@ -342,7 +459,7 @@ class VehicleRuntime:
             return command
         except Exception as exc:
             command = self._safety.apply(0.0, 0.0, estop=True)
-            self._actuator.send(command)
+            self._actuator.stop()
             if 'frame' in locals() and self._session_logger.active:
                 self._session_logger.record(frame_rgb=frame, command=command, control_mode="safe_stop")
             with self._lock:

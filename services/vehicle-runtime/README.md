@@ -32,10 +32,20 @@ Optional env vars:
 - `VEHICLE_API_BASE_URL` (e.g. `https://shared-runs-api-production.up.railway.app`)
 - `VEHICLE_MODEL_VERSION` (pins model; otherwise uses active model)
 - `VEHICLE_CAMERA_BACKEND=mock|opencv`
-- `VEHICLE_ACTUATOR_BACKEND=mock|stdout|serial`
+- `VEHICLE_ACTUATOR_BACKEND=mock|stdout|serial|deepracer`
 - `VEHICLE_ACTUATOR_SERIAL_PORT=COM7` (Windows) or `/dev/ttyUSB0` (Linux)
 - `VEHICLE_ACTUATOR_SERIAL_BAUDRATE=115200`
 - `VEHICLE_CAMERA_DEVICE_INDEX=0`
+- `VEHICLE_DEEPRACER_GPIO_ENABLE=436`
+- `VEHICLE_DEEPRACER_PWM_CHIP=0`
+- `VEHICLE_DEEPRACER_THROTTLE_CHANNEL=0`
+- `VEHICLE_DEEPRACER_STEERING_CHANNEL=1`
+- `VEHICLE_DEEPRACER_THROTTLE_NEUTRAL=1446000`
+- `VEHICLE_DEEPRACER_THROTTLE_FORWARD=1554000`
+- `VEHICLE_DEEPRACER_THROTTLE_REVERSE=1338000`
+- `VEHICLE_DEEPRACER_STEERING_CENTER=1450000`
+- `VEHICLE_DEEPRACER_STEERING_LEFT=1290000`
+- `VEHICLE_DEEPRACER_STEERING_RIGHT=1710000`
 - `VEHICLE_AUTOSTART=false`
 - `VEHICLE_DEFAULT_THROTTLE=0.35`
 - `VEHICLE_USER_ID=vehicle-runtime`
@@ -46,6 +56,8 @@ Optional env vars:
 
 - `GET /health`
 - `GET /status`
+- `GET /camera/latest.jpg`
+- `GET /camera/stream.mjpeg`
 - `POST /session/start`
 - `POST /session/stop?upload=false`
 - `POST /session/upload-latest`
@@ -98,6 +110,11 @@ Example payloads sent over serial:
 The microcontroller can map normalized values to PWM/servo/ESC outputs:
 - `steering`: `[-1, 1]`
 - `throttle`: `[0, max_throttle]` after safety clamping
+
+### `deepracer`
+- Writes directly to the DeepRacer's PWM sysfs nodes and actuator-enable GPIO.
+- Intended for running `vehicle-runtime` on the car itself when the stock manual-drive stack is unreliable.
+- Uses the current DeepRacer calibration values as defaults and keeps `stop()` pinned to neutral.
 
 ## Hardware Bring-Up Stubs (for classmate work this week)
 

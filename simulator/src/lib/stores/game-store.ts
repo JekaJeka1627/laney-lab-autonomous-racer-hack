@@ -8,12 +8,12 @@ import { getStats } from '@/lib/data/training-data';
 export interface CarState {
   x: number;
   z: number;
-  rotation: number; // radians, 0 = facing +Z
+  rotation: number;
   speed: number;
-  steering: number; // -1 (left) to 1 (right) — actual ramped value
-  throttle: number; // 0 to 1 — actual ramped value
-  steerTarget: number; // -1 (left) to 1 (right) — desired target
-  throttleTarget: number; // 0 to 1 — desired target
+  steering: number;
+  throttle: number;
+  steerTarget: number;
+  throttleTarget: number;
 }
 
 export interface LapRecord {
@@ -24,7 +24,7 @@ export interface LapRecord {
 }
 
 export interface ControlFrame {
-  t: number; // ms since run start
+  t: number;
   steering: number;
   throttle: number;
   speed: number;
@@ -34,7 +34,6 @@ export interface ControlFrame {
 }
 
 interface GameState {
-  // Game mode
   mode: 'menu' | 'driving' | 'paused' | 'replay' | 'autonomous' | 'auto-paused' | 'run-complete';
   trackId: string;
   driveMode: 'manual' | 'ai';
@@ -52,11 +51,9 @@ interface GameState {
   setLabRandomizationEnabled: (enabled: boolean) => void;
   setTrackVisualSeed: (seed: number) => void;
 
-  // Car
   car: CarState;
   updateCar: (partial: Partial<CarState>) => void;
 
-  // Input
   keys: Record<string, boolean>;
   setKey: (key: string, down: boolean) => void;
   manualControls: {
@@ -65,20 +62,21 @@ interface GameState {
     accelerate: boolean;
     brake: boolean;
   };
-  // Analog input (tilt / touch-zone controls)
-  controlScheme: 'buttons' | 'tilt';
-  setControlScheme: (scheme: 'buttons' | 'tilt') => void;
-  analogSteer: number; // -1.0 (left) to 1.0 (right), from gyroscope
-  analogThrottle: number; // 0.0 to 1.0, from touch zone
-  setAnalogSteer: (value: number) => void;
-  setAnalogThrottle: (value: number) => void;
-  setManualControl: (
-    control: 'left' | 'right' | 'accelerate' | 'brake',
-    active: boolean,
-  ) => void;
+  setManualControl: (control: 'left' | 'right' | 'accelerate' | 'brake', active: boolean) => void;
   resetManualControls: () => void;
 
-  // Lap tracking
+  input: { steer: number; throttle: number; brake: boolean };
+  setInput: (input: { steer: number; throttle: number; brake: boolean }) => void;
+  gamepadConnected: boolean;
+  setGamepadConnected: (connected: boolean) => void;
+
+  controlScheme: 'buttons' | 'tilt';
+  setControlScheme: (scheme: 'buttons' | 'tilt') => void;
+  analogSteer: number;
+  analogThrottle: number;
+  setAnalogSteer: (value: number) => void;
+  setAnalogThrottle: (value: number) => void;
+
   currentLapStart: number;
   lapCount: number;
   laps: LapRecord[];
@@ -86,30 +84,24 @@ interface GameState {
   completeLap: () => void;
   resetLaps: () => void;
 
-  // XP
   xp: number;
   addXp: (amount: number) => void;
 
-  // Data capture
   controlLog: ControlFrame[];
   runStartTime: number;
   logControl: () => void;
   clearControlLog: () => void;
 
-  // Off-track
   offTrack: boolean;
   setOffTrack: (v: boolean) => void;
   offTrackCount: number;
 
-  // Speed limiter (0–100 percentage of MAX_SPEED)
   maxSpeedPct: number;
   setMaxSpeedPct: (pct: number) => void;
 
-  // Timer
   elapsedMs: number;
   setElapsedMs: (ms: number) => void;
 
-  // Celebration
   celebrationActive: boolean;
   setCelebrationActive: (active: boolean) => void;
 }
@@ -119,7 +111,7 @@ function loadSavedStats() {
   const stats = getStats();
   return {
     laps: stats.totalLaps,
-    xp: stats.totalLaps * 50, // base XP approximation
+    xp: stats.totalLaps * 50,
   };
 }
 
@@ -165,12 +157,23 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   keys: {},
   setKey: (key, down) => set((s) => ({ keys: { ...s.keys, [key]: down } })),
-  manualControls: {
-    left: false,
-    right: false,
-    accelerate: false,
-    brake: false,
-  },
+  manualControls: { left: false, right: false, accelerate: false, brake: false },
+  setManualControl: (control, active) =>
+    set((s) => ({ manualControls: { ...s.manualControls, [control]: active } })),
+  resetManualControls: () =>
+    set({
+      keys: {},
+      manualControls: { left: false, right: false, accelerate: false, brake: false },
+      input: { steer: 0, throttle: 0, brake: false },
+      analogSteer: 0,
+      analogThrottle: 0,
+    }),
+
+  input: { steer: 0, throttle: 0, brake: false },
+  setInput: (input) => set({ input }),
+  gamepadConnected: false,
+  setGamepadConnected: (connected) => set({ gamepadConnected: connected }),
+
   controlScheme: loadControlScheme(),
   setControlScheme: (controlScheme) => {
     set({ controlScheme });
@@ -182,18 +185,6 @@ export const useGameStore = create<GameState>((set, get) => ({
   analogThrottle: 0,
   setAnalogSteer: (analogSteer) => set({ analogSteer: Math.max(-1, Math.min(1, analogSteer)) }),
   setAnalogThrottle: (analogThrottle) => set({ analogThrottle: Math.max(0, Math.min(1, analogThrottle)) }),
-  setManualControl: (control, active) =>
-    set((s) => ({ manualControls: { ...s.manualControls, [control]: active } })),
-  resetManualControls: () =>
-    set({
-      keys: {},
-      manualControls: {
-        left: false,
-        right: false,
-        accelerate: false,
-        brake: false,
-      },
-    }),
 
   currentLapStart: 0,
   lapCount: saved.laps,
@@ -203,7 +194,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     const now = performance.now();
     const s = get();
     const timeMs = now - s.currentLapStart;
-    if (timeMs < 2000) return; // ignore micro-laps
+    if (timeMs < 2000) return;
     const lap: LapRecord = {
       lapNumber: s.lapCount + 1,
       timeMs,
@@ -211,7 +202,6 @@ export const useGameStore = create<GameState>((set, get) => ({
       collisions: 0,
     };
     const best = s.bestLapMs === null ? timeMs : Math.min(s.bestLapMs, timeMs);
-    // XP: base 50 + bonus for clean lap
     const xpGain = 50 + (s.offTrackCount === 0 ? 25 : 0);
     set({
       lapCount: s.lapCount + 1,
@@ -221,7 +211,6 @@ export const useGameStore = create<GameState>((set, get) => ({
       offTrackCount: 0,
       xp: s.xp + xpGain,
     });
-    // Trigger celebration
     get().setCelebrationActive(true);
   },
   resetLaps: () => set({ lapCount: 0, laps: [], bestLapMs: null, currentLapStart: performance.now(), offTrackCount: 0 }),

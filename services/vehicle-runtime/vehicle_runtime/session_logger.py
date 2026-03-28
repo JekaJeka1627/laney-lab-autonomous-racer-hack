@@ -15,14 +15,14 @@ from PIL import Image
 from vehicle_runtime.actuators import ControlCommand
 
 
-@dataclass(slots=True)
+@dataclass
 class SessionFrame:
     timestamp_ms: int
     frame_idx: int
     rgb: np.ndarray
 
 
-@dataclass(slots=True)
+@dataclass
 class SessionControl:
     timestamp_ms: int
     frame_idx: int
@@ -31,7 +31,7 @@ class SessionControl:
     control_mode: str
 
 
-@dataclass(slots=True)
+@dataclass
 class SessionArtifacts:
     session_id: str
     root_dir: Path
@@ -42,7 +42,7 @@ class SessionArtifacts:
     duration_s: float
 
 
-@dataclass(slots=True)
+@dataclass
 class RunSessionLogger:
     cache_dir: Path
     user_id: str

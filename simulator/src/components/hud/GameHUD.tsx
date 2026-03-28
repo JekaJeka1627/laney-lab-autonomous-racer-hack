@@ -23,7 +23,9 @@ export function GameHUD() {
   const elapsedMs = useGameStore((s) => s.elapsedMs);
   const trackId = useGameStore((s) => s.trackId);
   const driveMode = useGameStore((s) => s.driveMode);
+  const controlScheme = useGameStore((s) => s.controlScheme);
   const mode = useGameStore((s) => s.mode);
+  const gamepadConnected = useGameStore((s) => s.gamepadConnected);
   const isCoarsePointer = useIsCoarsePointer();
   const aiModelStatus = useAiDriverStore((s) => s.status);
   const aiControlSource = useAiDriverStore((s) => s.controlSource);
@@ -101,11 +103,40 @@ export function GameHUD() {
 
       {!isAI && (mode === 'driving' || mode === 'paused') && (
         <div className="absolute bottom-24 left-3 max-w-[236px] rounded-2xl border border-gray-700/50 bg-black/70 px-3 py-2.5 text-xs text-white backdrop-blur-sm sm:bottom-4 sm:left-14 sm:max-w-none sm:px-4 sm:py-3">
-          <div className="mb-1 text-[9px] font-medium uppercase tracking-wider text-gray-500">Controls</div>
-          {isCoarsePointer ? (
+          <div className="mb-1 text-[9px] font-medium uppercase tracking-wider text-gray-500">
+            {gamepadConnected ? 'Gamepad' : 'Controls'}
+          </div>
+          {gamepadConnected ? (
             <div className="space-y-1.5">
-              <div className="text-gray-300">Left thumb steers. Right thumb controls gas and brake.</div>
-              <div className="text-gray-400">Pause, restart, and end-run stay centered above the touch controls.</div>
+              <div className="flex items-center gap-2">
+                <kbd className="min-w-[28px] rounded bg-gray-700 px-1.5 py-0.5 text-center font-mono text-[10px]">RT/R2</kbd>
+                <span className="text-gray-300">Gas</span>
+                <span className="mx-1 text-gray-600">·</span>
+                <kbd className="min-w-[28px] rounded bg-gray-700 px-1.5 py-0.5 text-center font-mono text-[10px]">LT/L2</kbd>
+                <span className="text-gray-300">Brake</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <kbd className="min-w-[28px] rounded bg-gray-700 px-1.5 py-0.5 text-center font-mono text-[10px]">L↔</kbd>
+                <span className="text-gray-300">Steer</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <kbd className="min-w-[28px] rounded bg-gray-700 px-1.5 py-0.5 text-center font-mono text-[10px]">Start</kbd>
+                <span className="text-gray-300">Pause</span>
+              </div>
+            </div>
+          ) : isCoarsePointer ? (
+            <div className="space-y-1.5">
+              {controlScheme === 'tilt' ? (
+                <>
+                  <div className="text-gray-300">Tilt your phone or tablet to steer. Use the right side for throttle and the left side to brake.</div>
+                  <div className="text-gray-400">Calibrate resets the steering center. Pause, restart, and end-run stay centered above the controls.</div>
+                </>
+              ) : (
+                <>
+                  <div className="text-gray-300">Left thumb steers. Right thumb controls gas and brake.</div>
+                  <div className="text-gray-400">Pause, restart, and end-run stay centered above the touch controls.</div>
+                </>
+              )}
               <div className="text-gray-500">Landscape is recommended for the clearest view.</div>
             </div>
           ) : (
@@ -126,7 +157,7 @@ export function GameHUD() {
                 <kbd className="min-w-[28px] rounded bg-gray-700 px-1.5 py-0.5 text-center font-mono text-[10px]">1-5</kbd>
                 <span className="text-gray-300">Throttle</span>
                 <span className="mx-1 text-gray-600">·</span>
-                <kbd className="min-w-[28px] rounded bg-gray-700 px-1.5 py-0.5 text-center font-mono text-[10px]">␣</kbd>
+                <kbd className="min-w-[28px] rounded bg-gray-700 px-1.5 py-0.5 text-center font-mono text-[10px]">Space</kbd>
                 <span className="text-gray-300">Brake</span>
               </div>
             </div>

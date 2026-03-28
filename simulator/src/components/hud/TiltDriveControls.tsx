@@ -16,6 +16,7 @@ export function TiltDriveControls() {
   const mode = useGameStore((s) => s.mode);
   const driveMode = useGameStore((s) => s.driveMode);
   const controlScheme = useGameStore((s) => s.controlScheme);
+  const gamepadConnected = useGameStore((s) => s.gamepadConnected);
   const setControlScheme = useGameStore((s) => s.setControlScheme);
   const manualControls = useGameStore((s) => s.manualControls);
   const analogThrottle = useGameStore((s) => s.analogThrottle);
@@ -95,7 +96,7 @@ export function TiltDriveControls() {
     };
   }, []);
 
-  if (!isCoarsePointer || !isActive || controlScheme !== 'tilt') {
+  if (!isCoarsePointer || gamepadConnected || !isActive || controlScheme !== 'tilt') {
     return null;
   }
 

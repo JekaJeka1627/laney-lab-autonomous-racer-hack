@@ -6,6 +6,7 @@ import { TrackSelect } from '@/components/game/TrackSelect';
 import { GameHUD } from '@/components/hud/GameHUD';
 import { Minimap } from '@/components/minimap/Minimap';
 import { KeyboardHandler } from '@/components/game/KeyboardHandler';
+import { GamepadHandler } from '@/components/game/GamepadHandler';
 import { PauseOverlay } from '@/components/game/PauseOverlay';
 import { AutoControls } from '@/components/game/AutoControls';
 import { RunComplete } from '@/components/game/RunComplete';
@@ -32,6 +33,7 @@ export default function Home() {
   return (
     <>
       <KeyboardHandler />
+      <GamepadHandler />
       {!inGame ? (
         <TrackSelect />
       ) : (

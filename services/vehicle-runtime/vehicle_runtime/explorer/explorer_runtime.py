@@ -146,8 +146,10 @@ class ExplorerRuntime:
     @property
     def status_dict(self) -> dict:
         """Return a status snapshot for the dashboard."""
+        mode_name = self.planner.mode.name if self._running else "STOPPED"
         return {
-            "mode": self.planner.mode.name,
+            "mode": mode_name,
+            "running": self._running,
             "variant": self.config.variant.value,
             "variant_label": self.config.variant.label,
             "distance_ft": round(self._distance_traveled_ft, 1),

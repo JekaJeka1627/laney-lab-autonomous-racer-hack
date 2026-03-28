@@ -292,7 +292,6 @@ class NavigationPlanner:
 
         # First, check if there are pre-mapping hints to follow
         if hasattr(self, '_premap_hints') and self._premap_hints:
-            import math
             # Prioritize high-priority hints
             high_priority_hints = [h for h in self._premap_hints if h.get("priority") == "high"]
             if high_priority_hints:

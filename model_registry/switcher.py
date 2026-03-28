@@ -9,6 +9,8 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import tempfile
+import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -206,7 +208,22 @@ def _push_model_to_runtime(model_id: str, local_path: Path) -> bool:
     if not entry:
         return False
 
-    # Find the model file to push
+    try:
+        with urllib.request.urlopen(f"{VEHICLE_RUNTIME_URL}/model/cache", timeout=5) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+        for model in payload.get("models", []):
+            if model.get("model_id") == model_id:
+                req = urllib.request.Request(
+                    f"{VEHICLE_RUNTIME_URL}/model/activate?model_id={urllib.parse.quote(model_id)}",
+                    method="POST",
+                    data=b"",
+                )
+                with urllib.request.urlopen(req, timeout=10) as activate_resp:
+                    return activate_resp.status == 200
+    except Exception:
+        pass
+
+    # Find the model file or directory to push
     src = Path(entry.local_path) if entry.local_path else None
     if src and not src.is_absolute():
         src = REGISTRY_DIR / src
@@ -215,27 +232,29 @@ def _push_model_to_runtime(model_id: str, local_path: Path) -> bool:
         print(f"Warning: no local model file found for '{model_id}', runtime won't reload new weights.")
         return False
 
-    # If it's a directory, find the primary model file inside it
-    model_file: Path | None = None
+    # If it's a directory, zip the entire deployable directory so the runtime
+    # receives model.pb + metadata together.
+    upload_file: Path | None = None
     if src.is_dir():
-        for ext in (".pb", ".onnx", ".tflite", ".pt", ".pth"):
-            candidates = list(src.rglob(f"*{ext}"))
-            if candidates:
-                model_file = candidates[0]
-                break
+        tmp_dir = Path(tempfile.mkdtemp(prefix="model-push-"))
+        upload_file = tmp_dir / f"{model_id}.zip"
+        with zipfile.ZipFile(upload_file, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+            for item in src.rglob("*"):
+                if item.is_file():
+                    zf.write(item, item.relative_to(src))
     elif src.is_file():
-        model_file = src
+        upload_file = src
 
-    if model_file is None:
+    if upload_file is None:
         print(f"Warning: could not find a model weight file in '{src}'")
         return False
 
     # Multipart form upload to /model/push
     boundary = "----ModelPushBoundary"
-    filename = model_file.name
+    filename = upload_file.name
     content_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
 
-    with open(model_file, "rb") as f:
+    with open(upload_file, "rb") as f:
         file_data = f.read()
 
     parts = (

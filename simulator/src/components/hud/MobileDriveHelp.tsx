@@ -11,6 +11,7 @@ export function MobileDriveHelp() {
   const mode = useGameStore((s) => s.mode);
   const driveMode = useGameStore((s) => s.driveMode);
   const controlScheme = useGameStore((s) => s.controlScheme);
+  const gamepadConnected = useGameStore((s) => s.gamepadConnected);
   const setControlScheme = useGameStore((s) => s.setControlScheme);
   const isCoarsePointer = useIsCoarsePointer();
   const { supported, requestPermission } = useDeviceOrientation();
@@ -37,7 +38,13 @@ export function MobileDriveHelp() {
     ? 'Tilt steering is unavailable on this device. Button controls are enabled.'
     : null;
 
-  if (!isCoarsePointer || dismissed || driveMode !== 'manual' || (mode !== 'driving' && mode !== 'paused')) {
+  if (
+    !isCoarsePointer ||
+    gamepadConnected ||
+    dismissed ||
+    driveMode !== 'manual' ||
+    (mode !== 'driving' && mode !== 'paused')
+  ) {
     return null;
   }
 

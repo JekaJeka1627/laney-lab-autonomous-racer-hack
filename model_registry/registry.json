@@ -52,6 +52,23 @@
       "tags": ["physical-racing", "discrete", "multi-signal-reward"]
     },
     {
+      "id": "stay-on-track",
+      "display_name": "StayOnTrack Physical PPO",
+      "source_type": "external",
+      "source_notes": "Public physical-track DeepRacer model from SDC Lab. Discrete action space, clipped PPO, greyscale front-facing camera input. Action space includes steering angles -30/-15/0/15/30 with speeds 1.4/1.6/1.8.",
+      "local_path": "models/external/stay-on-track/",
+      "remote_path": "https://github.com/SDC-Lab/DeepRacer-Models/raw/main/models/StayOnTrack-model.tar.gz",
+      "format": "tensorflow-pb",
+      "version": "1",
+      "date_added": "2026-03-26T22:30:00+00:00",
+      "trained_for": "physical track racing",
+      "author": "SDC Lab, Western Sydney University",
+      "team": "",
+      "status": "testing",
+      "notes": "Imported from SDC-Lab/DeepRacer-Models. Archive contains agent/model.pb plus model_metadata.json. Good Saturday candidate as a third AWS-native physical-track comparison model.",
+      "tags": ["physical-racing", "discrete", "greyscale", "public-model"]
+    },
+    {
       "id": "lars-physical-ppo",
       "display_name": "Lars Ludvigsen Physical Racing PPO",
       "source_type": "external",
@@ -86,5 +103,5 @@
       "tags": ["exploration", "obstacle-avoidance", "visual-odometry", "return-to-home", "camera-only"]
     }
   ],
-  "updated_at": "2026-03-23T04:20:00+00:00"
+  "updated_at": "2026-03-26T22:30:00+00:00"
 }

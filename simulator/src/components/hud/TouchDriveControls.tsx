@@ -73,13 +73,20 @@ export function TouchDriveControls() {
   const mode = useGameStore((s) => s.mode);
   const driveMode = useGameStore((s) => s.driveMode);
   const controlScheme = useGameStore((s) => s.controlScheme);
+  const gamepadConnected = useGameStore((s) => s.gamepadConnected);
   const manualControls = useGameStore((s) => s.manualControls);
   const setManualControl = useGameStore((s) => s.setManualControl);
   const resetManualControls = useGameStore((s) => s.resetManualControls);
   const setMode = useGameStore((s) => s.setMode);
   const isCoarsePointer = useIsCoarsePointer();
 
-  if (!isCoarsePointer || driveMode !== 'manual' || (mode !== 'driving' && mode !== 'paused') || controlScheme === 'tilt') {
+  if (
+    !isCoarsePointer ||
+    gamepadConnected ||
+    driveMode !== 'manual' ||
+    (mode !== 'driving' && mode !== 'paused') ||
+    controlScheme === 'tilt'
+  ) {
     return null;
   }
 
