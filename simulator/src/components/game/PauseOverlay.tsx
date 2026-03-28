@@ -22,6 +22,7 @@ export function PauseOverlay() {
   function restart() {
     const store = useGameStore.getState();
     const track = getTrack(store.trackId);
+    store.resetManualControls();
     store.updateCar({
       x: track.spawnPos[0],
       z: track.spawnPos[2],
@@ -29,6 +30,8 @@ export function PauseOverlay() {
       speed: 0,
       steering: 0,
       throttle: 0,
+      steerTarget: 0,
+      throttleTarget: 0,
     });
     store.resetLaps();
     store.clearControlLog();

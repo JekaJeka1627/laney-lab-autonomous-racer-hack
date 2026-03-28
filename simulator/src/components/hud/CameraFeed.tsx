@@ -1,6 +1,7 @@
 'use client';
 
 import { useCapturePreviewStore } from '@/lib/capture/capture-preview-store';
+import { useIsCoarsePointer } from '@/lib/hooks/useIsCoarsePointer';
 import { Camera, Eye, EyeOff } from 'lucide-react';
 
 export function CameraFeed() {
@@ -9,9 +10,10 @@ export function CameraFeed() {
   const isRecording = useCapturePreviewStore((s) => s.isRecording);
   const pipVisible = useCapturePreviewStore((s) => s.pipVisible);
   const togglePipVisible = useCapturePreviewStore((s) => s.togglePipVisible);
+  const isCoarsePointer = useIsCoarsePointer();
 
   return (
-    <div className="absolute top-4 right-4 z-20 flex flex-col items-end gap-2">
+    <div className={`absolute z-20 flex flex-col items-end gap-2 ${isCoarsePointer ? 'right-3 top-3' : 'right-4 top-4'}`}>
       <button
         onClick={togglePipVisible}
         className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-black/70 hover:bg-black/80 text-xs text-gray-200 border border-gray-700 backdrop-blur-sm transition-colors"
@@ -22,7 +24,7 @@ export function CameraFeed() {
       </button>
 
       {pipVisible && (
-        <div className="w-[240px] rounded-xl overflow-hidden border border-gray-700 bg-black/80 backdrop-blur-sm shadow-2xl shadow-black/50">
+        <div className={`${isCoarsePointer ? 'w-[160px]' : 'w-[240px]'} rounded-xl overflow-hidden border border-gray-700 bg-black/80 backdrop-blur-sm shadow-2xl shadow-black/50`}>
           <div className="px-3 py-2 border-b border-gray-700 flex items-center justify-between">
             <div className="flex items-center gap-2 text-xs font-semibold tracking-wider text-gray-200">
               <Camera className="w-3.5 h-3.5 text-cyan-400" />
@@ -45,8 +47,8 @@ export function CameraFeed() {
             )}
           </div>
 
-          <div className="px-3 py-2 text-[10px] text-gray-400 flex items-center justify-between">
-            <span>What the model sees (160x120)</span>
+          <div className="px-3 py-2 text-[10px] text-gray-400 flex items-center justify-between gap-2">
+            <span>{isCoarsePointer ? 'Model view' : 'What the model sees (160x120)'}</span>
             <span>{bufferedFrames.toLocaleString()} buffered</span>
           </div>
         </div>

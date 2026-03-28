@@ -4,7 +4,7 @@ Next.js + React Three Fiber simulator for collecting run data and syncing all co
 
 ## What Works
 
-- Manual driving (keyboard) and demo AI driving mode
+- Manual driving with keyboard or touch controls, plus demo AI driving mode
 - Chase-camera 3D simulator + HUD + minimap
 - Telemetry capture (`steering`, `throttle`, `speed`, position) to local browser storage
 - Forward-facing AI camera capture (`160x120`) at ~10 FPS
@@ -52,6 +52,8 @@ npm run build
 - `Space`: brake (manual) / pause-resume (AI mode)
 - `Esc`: pause/resume (manual mode)
 - `1-5`: snap throttle target presets
+- Touch devices: on-screen left/right steering, gas, brake, pause, restart, and end-run controls
+- Phones/tablets: landscape orientation is recommended
 
 ## Camera Capture + Export Workflow
 

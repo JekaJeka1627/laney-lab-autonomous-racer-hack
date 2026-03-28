@@ -124,14 +124,40 @@ export function Car3D() {
       } else {
         car.speed = Math.max(car.speed - FRICTION * 2 * dt, clampedTarget);
       }
+    } else if (store.controlScheme === 'tilt') {
+      car.steerTarget = store.analogSteer;
+      car.throttleTarget = store.analogThrottle;
+
+      car.steering += clamp(car.steerTarget - car.steering, -STEER_RAMP * dt, STEER_RAMP * dt);
+      if (Math.abs(store.analogSteer) < 0.05) {
+        car.steering *= 1 - (STEER_DAMP * dt);
+      }
+      car.steering = clamp(car.steering, -1, 1);
+      if (Math.abs(car.steering) < 0.01) car.steering = 0;
+
+      car.throttle += clamp(car.throttleTarget - car.throttle, -THROTTLE_RAMP * dt, THROTTLE_RAMP * dt);
+      car.throttle = clamp(car.throttle, 0, 1);
+
+      if (car.throttle > 0.01) {
+        car.speed = Math.min(car.speed + ACCELERATION * car.throttle * dt, effectiveMaxSpeed);
+      }
+      if (store.manualControls.brake) {
+        car.speed = Math.max(car.speed - BRAKE_FORCE * dt, 0);
+        car.throttleTarget = 0;
+      }
+      if (car.throttle < 0.05) {
+        if (car.speed > 0) car.speed = Math.max(0, car.speed - FRICTION * dt);
+        else if (car.speed < 0) car.speed = Math.min(0, car.speed + FRICTION * dt);
+      }
     } else {
       // --- Manual keyboard input (target + ramp) ---
       const keys = store.keys;
-      const up = keys['ArrowUp'] || keys['w'] || keys['W'];
+      const controls = store.manualControls;
+      const up = controls.accelerate;
       const down = keys['ArrowDown'] || keys['s'] || keys['S'];
-      const left = keys['ArrowLeft'] || keys['a'] || keys['A'];
-      const right = keys['ArrowRight'] || keys['d'] || keys['D'];
-      const brake = keys[' ']; // Space = panic brake
+      const left = controls.left;
+      const right = controls.right;
+      const brake = controls.brake; // Space or touch brake = panic brake
 
       // Steering target: digital keys set target, ramp smooths it
       if (left) car.steerTarget = 1;

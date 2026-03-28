@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useGameStore } from '@/lib/stores/game-store';
+import { useIsCoarsePointer } from '@/lib/hooks/useIsCoarsePointer';
 
 const BAR_HEIGHT = 140;
 const THUMB_H = 14;
@@ -16,6 +17,7 @@ export function SpeedLimiter() {
   const maxSpeedPct = useGameStore((s) => s.maxSpeedPct);
   const setMaxSpeedPct = useGameStore((s) => s.setMaxSpeedPct);
   const mode = useGameStore((s) => s.mode);
+  const isCoarsePointer = useIsCoarsePointer();
 
   const barRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState(false);
@@ -86,7 +88,7 @@ export function SpeedLimiter() {
   const maxKmh = Math.round((25 * maxSpeedPct) / 100 * 3.6);
 
   return (
-    <div className="absolute left-4 bottom-20 z-20 pointer-events-auto select-none">
+    <div className={`absolute z-20 pointer-events-auto select-none ${isCoarsePointer ? 'left-3 top-24' : 'left-4 bottom-20'}`}>
       <div className="flex flex-col items-center gap-1">
         {/* Label */}
         <div className="text-[10px] text-gray-400 uppercase tracking-wider font-medium mb-1">

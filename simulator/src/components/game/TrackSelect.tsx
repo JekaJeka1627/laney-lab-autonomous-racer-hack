@@ -65,6 +65,7 @@ export function TrackSelect() {
 
   function initTrack(trackId: string) {
     setTrackId(trackId);
+    useGameStore.getState().resetManualControls();
     useGameStore.getState().resetLaps();
     useGameStore.getState().clearControlLog();
     const track = TRACKS.find((t) => t.id === trackId)!;
@@ -79,6 +80,8 @@ export function TrackSelect() {
       speed: 0,
       steering: 0,
       throttle: 0,
+      steerTarget: 0,
+      throttleTarget: 0,
     });
   }
 

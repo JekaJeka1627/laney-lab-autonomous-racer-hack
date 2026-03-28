@@ -11,8 +11,16 @@ html, body {
   height: 100%;
   background: #000;
   color: #fff;
+  overscroll-behavior: none;
 }
 
 body {
   overflow: auto;
+}
+
+.simulator-shell {
+  touch-action: none;
+  overscroll-behavior: none;
+  user-select: none;
+  -webkit-user-select: none;
 }

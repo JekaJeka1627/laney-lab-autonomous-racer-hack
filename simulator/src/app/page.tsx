@@ -15,6 +15,7 @@ import { ControlsHUD } from '@/components/hud/ControlsHUD';
 import { CameraFeed } from '@/components/hud/CameraFeed';
 import { ModelInferenceRunner } from '@/components/ai/ModelInferenceRunner';
 import { AiModelPanel } from '@/components/ai/AiModelPanel';
+import { MobileDriveHelp } from '@/components/hud/MobileDriveHelp';
 
 const GameScene = dynamic(
   () => import('@/components/game/GameScene').then((m) => ({ default: m.GameScene })),
@@ -34,7 +35,7 @@ export default function Home() {
       {!inGame ? (
         <TrackSelect />
       ) : (
-        <div className="relative w-screen h-screen overflow-hidden bg-black">
+        <div className="simulator-shell relative w-screen h-screen overflow-hidden bg-black">
           <ModelInferenceRunner
             selectionMode={aiModelSelectionMode}
             pinnedModelVersion={aiPinnedModelVersion}
@@ -46,6 +47,7 @@ export default function Home() {
           <AutoControls />
           <SpeedLimiter />
           <ManualDriveControls />
+          <MobileDriveHelp />
           <ControlsHUD />
           <CameraFeed />
           <AiModelPanel />

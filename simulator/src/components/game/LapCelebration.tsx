@@ -9,9 +9,16 @@ const PARTICLE_COUNT = 100;
 const DURATION = 2500; // ms
 const FADE_START = 2000; // ms
 
+type WebAudioWindow = Window & typeof globalThis & {
+  webkitAudioContext?: typeof AudioContext;
+};
+
 function playCelebrationSound() {
   try {
-    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const audioWindow = window as WebAudioWindow;
+    const AudioContextCtor = audioWindow.AudioContext || audioWindow.webkitAudioContext;
+    if (!AudioContextCtor) return;
+    const audioContext = new AudioContextCtor();
     const oscillator = audioContext.createOscillator();
     const gainNode = audioContext.createGain();
 

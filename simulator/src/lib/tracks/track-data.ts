@@ -463,6 +463,98 @@ const classroomLabCObstacles: TrackObstacle[] = [
   { id: "cone-c3", kind: "cone", x: -34, z: 16, scale: 1.0 },
 ];
 
+// ---------------------------------------------------------------------------
+// Training Gauntlet -- purpose-built for behavioral cloning data collection.
+//
+// DESIGN GOAL: Maximize steering diversity per lap so every minute of human
+// driving generates the richest possible training signal for imitation
+// learning models. One lap here covers more of the steering range [-1, 1]
+// than 3-4 laps on the Oval.
+//
+// SEGMENTS (in order):
+//   1. Long straight       -- zero steering hold, speed buildup
+//   2. Gentle sweeper (R)  -- mild constant steering, large radius
+//   3. Chicane (L-R-L)     -- rapid corrections, tests reaction time
+//   4. Tightening turn (L) -- radius decreases mid-turn, proportional response
+//   5. Hairpin (R)         -- maximum steering input, tight 180
+//   6. S-curve             -- smooth left-right transitions
+//   7. Recovery zone       -- wide section for centering practice
+//   8. Medium curve (L)    -- heading back toward start
+//   9. Return straight     -- gentle deceleration zone
+//  10. Final curve         -- reconnects to start/finish
+//
+// DATA COLLECTION TIPS:
+//   - Drive 15-20 laps minimum per session
+//   - Vary speed between laps (some fast, some slow)
+//   - On dedicated recovery laps, intentionally drift to the edge and
+//     steer back -- this is the most valuable data for BC
+//   - Use multiple operators for driving style diversity
+//   - See docs/data-collection-guide.md and docs/training-track-design.md
+// ---------------------------------------------------------------------------
+const trainingGauntletWaypoints: TrackPoint[] = [
+  // Start / long straight (heading north, zero steering)
+  { x: 0, z: -40 },
+  { x: 0, z: -32 },
+  { x: 0, z: -24 },
+  { x: 0, z: -16 },
+  { x: 0, z: -8 },
+  { x: 0, z: 0 },
+
+  // Gentle sweeper right (large radius, mild constant steering)
+  { x: 4, z: 8 },
+  { x: 10, z: 15 },
+  { x: 18, z: 20 },
+  { x: 27, z: 22 },
+  { x: 35, z: 20 },
+
+  // Chicane: quick left-right-left (rapid corrections)
+  { x: 40, z: 15 },
+  { x: 38, z: 8 },
+  { x: 42, z: 2 },
+  { x: 38, z: -4 },
+
+  // Tightening turn left (radius decreases mid-turn)
+  { x: 34, z: -10 },
+  { x: 28, z: -14 },
+  { x: 20, z: -16 },
+  { x: 14, z: -20 },
+  { x: 12, z: -26 },
+
+  // Hairpin right (maximum steering input, tight radius)
+  { x: 14, z: -33 },
+  { x: 18, z: -38 },
+  { x: 22, z: -40 },
+  { x: 26, z: -38 },
+  { x: 28, z: -33 },
+
+  // S-curve section (smooth left-right transitions)
+  { x: 24, z: -26 },
+  { x: 18, z: -22 },
+  { x: 12, z: -22 },
+  { x: 6, z: -26 },
+
+  // Wide recovery zone into narrow precision section
+  { x: 0, z: -30 },
+  { x: -6, z: -34 },
+  { x: -14, z: -36 },
+
+  // Medium left curve heading back to start
+  { x: -22, z: -34 },
+  { x: -28, z: -28 },
+  { x: -30, z: -20 },
+
+  // Gentle return straight
+  { x: -28, z: -12 },
+  { x: -22, z: -6 },
+  { x: -16, z: -4 },
+
+  // Final curve back to start line
+  { x: -10, z: -8 },
+  { x: -6, z: -16 },
+  { x: -4, z: -26 },
+  { x: -2, z: -34 },
+];
+
 const nascarRacingObstacles: TrackObstacle[] = [
   {
     id: "nascar-bleachers-n",
@@ -636,6 +728,19 @@ export const TRACKS: TrackDef[] = [
     spawnRotation: computeSpawnRotation(-30, -18, classroomLabCWaypoints),
     waypoints: classroomLabCWaypoints,
     obstacles: classroomLabCObstacles,
+  },
+  {
+    id: "training-gauntlet",
+    name: "Training Gauntlet",
+    difficulty: "intermediate",
+    description:
+      "Purpose-built for BC model training: gentle curves, chicanes, hairpins, " +
+      "tightening turns, S-curves, and width changes in one lap",
+    environment: "lab",
+    width: 5,
+    spawnPos: [0, 0.5, -40],
+    spawnRotation: computeSpawnRotation(0, -40, trainingGauntletWaypoints),
+    waypoints: trainingGauntletWaypoints,
   },
 ];
 

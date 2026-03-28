@@ -13,11 +13,11 @@ describe('getRemoteRunsSummary', () => {
     delete process.env.NEXT_PUBLIC_API_URL;
   });
 
-  it('requires NEXT_PUBLIC_API_URL for shared API mode', () => {
+  it('falls back to same-origin when NEXT_PUBLIC_API_URL is unset in the browser', () => {
     delete process.env.NEXT_PUBLIC_API_URL;
 
-    expect(getApiBaseUrl()).toBeNull();
-    expect(isApiConfigured()).toBe(false);
+    expect(getApiBaseUrl()).toBe('http://localhost:3000');
+    expect(isApiConfigured()).toBe(true);
   });
 
   it('uses the canonical /api/runs/summary endpoint', async () => {

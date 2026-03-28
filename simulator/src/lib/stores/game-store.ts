@@ -59,6 +59,24 @@ interface GameState {
   // Input
   keys: Record<string, boolean>;
   setKey: (key: string, down: boolean) => void;
+  manualControls: {
+    left: boolean;
+    right: boolean;
+    accelerate: boolean;
+    brake: boolean;
+  };
+  // Analog input (tilt / touch-zone controls)
+  controlScheme: 'buttons' | 'tilt';
+  setControlScheme: (scheme: 'buttons' | 'tilt') => void;
+  analogSteer: number; // -1.0 (left) to 1.0 (right), from gyroscope
+  analogThrottle: number; // 0.0 to 1.0, from touch zone
+  setAnalogSteer: (value: number) => void;
+  setAnalogThrottle: (value: number) => void;
+  setManualControl: (
+    control: 'left' | 'right' | 'accelerate' | 'brake',
+    active: boolean,
+  ) => void;
+  resetManualControls: () => void;
 
   // Lap tracking
   currentLapStart: number;
@@ -111,6 +129,12 @@ function loadLabRandomizationEnabled() {
   return raw == null ? true : raw === 'true';
 }
 
+function loadControlScheme(): 'buttons' | 'tilt' {
+  if (typeof window === 'undefined') return 'buttons';
+  const saved = localStorage.getItem('deepracer-control-scheme');
+  return saved === 'tilt' ? 'tilt' : 'buttons';
+}
+
 const saved = loadSavedStats();
 
 export const useGameStore = create<GameState>((set, get) => ({
@@ -141,6 +165,35 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   keys: {},
   setKey: (key, down) => set((s) => ({ keys: { ...s.keys, [key]: down } })),
+  manualControls: {
+    left: false,
+    right: false,
+    accelerate: false,
+    brake: false,
+  },
+  controlScheme: loadControlScheme(),
+  setControlScheme: (controlScheme) => {
+    set({ controlScheme });
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('deepracer-control-scheme', controlScheme);
+    }
+  },
+  analogSteer: 0,
+  analogThrottle: 0,
+  setAnalogSteer: (analogSteer) => set({ analogSteer: Math.max(-1, Math.min(1, analogSteer)) }),
+  setAnalogThrottle: (analogThrottle) => set({ analogThrottle: Math.max(0, Math.min(1, analogThrottle)) }),
+  setManualControl: (control, active) =>
+    set((s) => ({ manualControls: { ...s.manualControls, [control]: active } })),
+  resetManualControls: () =>
+    set({
+      keys: {},
+      manualControls: {
+        left: false,
+        right: false,
+        accelerate: false,
+        brake: false,
+      },
+    }),
 
   currentLapStart: 0,
   lapCount: saved.laps,

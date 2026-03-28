@@ -9,6 +9,22 @@ import { useGameStore } from '@/lib/stores/game-store';
  */
 export function KeyboardHandler() {
   useEffect(() => {
+    const controlMap: Partial<Record<string, 'left' | 'right' | 'accelerate' | 'brake'>> = {
+      ArrowLeft: 'left',
+      a: 'left',
+      A: 'left',
+      ArrowRight: 'right',
+      d: 'right',
+      D: 'right',
+      ArrowUp: 'accelerate',
+      w: 'accelerate',
+      W: 'accelerate',
+      ArrowDown: 'brake',
+      s: 'brake',
+      S: 'brake',
+      ' ': 'brake',
+    };
+
     function onKeyDown(e: KeyboardEvent) {
       const store = useGameStore.getState();
 
@@ -38,10 +54,19 @@ export function KeyboardHandler() {
       }
 
       store.setKey(e.key, true);
+      const mappedControl = controlMap[e.key];
+      if (mappedControl) {
+        store.setManualControl(mappedControl, true);
+      }
     }
 
     function onKeyUp(e: KeyboardEvent) {
-      useGameStore.getState().setKey(e.key, false);
+      const store = useGameStore.getState();
+      store.setKey(e.key, false);
+      const mappedControl = controlMap[e.key];
+      if (mappedControl) {
+        store.setManualControl(mappedControl, false);
+      }
     }
 
     window.addEventListener('keydown', onKeyDown);
