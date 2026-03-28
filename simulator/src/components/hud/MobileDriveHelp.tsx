@@ -6,6 +6,7 @@ import { useDeviceOrientation } from '@/lib/hooks/useDeviceOrientation';
 import { useIsCoarsePointer } from '@/lib/hooks/useIsCoarsePointer';
 
 const STORAGE_KEY = 'deepracer-mobile-help-dismissed';
+const CONTROL_SCHEME_KEY = 'deepracer-control-scheme';
 
 export function MobileDriveHelp() {
   const mode = useGameStore((s) => s.mode);
@@ -14,7 +15,7 @@ export function MobileDriveHelp() {
   const gamepadConnected = useGameStore((s) => s.gamepadConnected);
   const setControlScheme = useGameStore((s) => s.setControlScheme);
   const isCoarsePointer = useIsCoarsePointer();
-  const { supported, requestPermission } = useDeviceOrientation();
+  const { supported, permissionGranted, requestPermission, calibrate } = useDeviceOrientation();
   const [dismissed, setDismissed] = useState(() =>
     typeof window === 'undefined' ? true : localStorage.getItem(STORAGE_KEY) === 'true',
   );
@@ -33,6 +34,20 @@ export function MobileDriveHelp() {
       setControlScheme('buttons');
     }
   }, [controlScheme, setControlScheme, supported]);
+
+  useEffect(() => {
+    if (
+      typeof window === 'undefined' ||
+      !isCoarsePointer ||
+      !supported ||
+      localStorage.getItem(CONTROL_SCHEME_KEY) !== null ||
+      controlScheme === 'tilt'
+    ) {
+      return;
+    }
+
+    setControlScheme('tilt');
+  }, [controlScheme, isCoarsePointer, setControlScheme, supported]);
 
   const fallbackMessage = !supported && controlScheme !== 'tilt'
     ? 'Tilt steering is unavailable on this device. Button controls are enabled.'
@@ -63,6 +78,23 @@ export function MobileDriveHelp() {
 
     setSchemeMessage(null);
     setControlScheme(nextScheme);
+  }
+
+  async function handleStartDriving() {
+    if (controlScheme === 'tilt' && supported) {
+      if (requiresPermission && !permissionGranted) {
+        const granted = await requestPermission();
+        if (!granted) {
+          setControlScheme('buttons');
+          setSchemeMessage('Motion access was denied. Button controls are still available.');
+          return;
+        }
+      }
+      calibrate();
+    }
+
+    localStorage.setItem(STORAGE_KEY, 'true');
+    setDismissed(true);
   }
 
   return (
@@ -118,10 +150,7 @@ export function MobileDriveHelp() {
         </div>
         <button
           type="button"
-          onClick={() => {
-            localStorage.setItem(STORAGE_KEY, 'true');
-            setDismissed(true);
-          }}
+          onClick={() => void handleStartDriving()}
           className="mt-4 rounded-full bg-cyan-300 px-4 py-2 text-sm font-semibold text-slate-950 touch-manipulation"
         >
           Start driving

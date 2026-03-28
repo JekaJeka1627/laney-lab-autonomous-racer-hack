@@ -121,10 +121,27 @@ function loadLabRandomizationEnabled() {
   return raw == null ? true : raw === 'true';
 }
 
+function detectDefaultControlScheme(): 'buttons' | 'tilt' {
+  if (typeof window === 'undefined') return 'buttons';
+
+  const userAgent = navigator.userAgent || navigator.vendor || '';
+  const platform = navigator.platform || '';
+  const maxTouchPoints = navigator.maxTouchPoints || 0;
+  const coarsePointer = window.matchMedia('(pointer: coarse)').matches;
+  const smallViewport = Math.min(window.innerWidth, window.innerHeight) <= 1024;
+  const mobilePattern = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i;
+  const ipadOs = platform === 'MacIntel' && maxTouchPoints > 1;
+  const likelyMobileOrTablet = coarsePointer && smallViewport && (mobilePattern.test(userAgent) || ipadOs);
+  const tiltSupported = typeof DeviceOrientationEvent !== 'undefined';
+
+  return likelyMobileOrTablet && tiltSupported ? 'tilt' : 'buttons';
+}
+
 function loadControlScheme(): 'buttons' | 'tilt' {
   if (typeof window === 'undefined') return 'buttons';
   const saved = localStorage.getItem('deepracer-control-scheme');
-  return saved === 'tilt' ? 'tilt' : 'buttons';
+  if (saved === 'tilt' || saved === 'buttons') return saved;
+  return detectDefaultControlScheme();
 }
 
 const saved = loadSavedStats();
