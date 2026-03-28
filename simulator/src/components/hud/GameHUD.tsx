@@ -128,8 +128,8 @@ export function GameHUD() {
             <div className="space-y-1.5">
               {controlScheme === 'tilt' ? (
                 <>
-                  <div className="text-gray-300">Tilt your phone or tablet to steer. Use the right side for throttle and the left side to brake.</div>
-                  <div className="text-gray-400">Calibrate resets the steering center. Pause, restart, and end-run stay centered above the controls.</div>
+                  <div className="text-gray-300">Tilt your phone forward to accelerate, back toward you to brake, and left or right to steer.</div>
+                  <div className="text-gray-400">Calibrate resets the neutral angle. Pause, restart, and end-run stay centered above the controls.</div>
                 </>
               ) : (
                 <>

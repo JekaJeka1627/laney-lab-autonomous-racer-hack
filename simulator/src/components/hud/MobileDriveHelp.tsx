@@ -132,9 +132,9 @@ export function MobileDriveHelp() {
         <div className="mt-2 space-y-1 text-sm text-slate-300">
           {controlScheme === 'tilt' ? (
             <>
-              <p>Tilt your device to steer. Use Calibrate to reset the center angle.</p>
-              <p>Right side of the screen controls gas. Slide higher for more throttle.</p>
-              <p>Tap the left side to brake. Pause, restart, and end-run stay centered.</p>
+              <p>Tilt your phone forward to accelerate and tilt it back toward you to brake.</p>
+              <p>Tilt left to steer left and right to steer right. Use Calibrate to reset neutral.</p>
+              <p>Pause, restart, and end-run stay centered at the bottom of the screen.</p>
             </>
           ) : (
             <>

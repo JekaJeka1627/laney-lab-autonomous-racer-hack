@@ -24,7 +24,7 @@ export function useDeviceOrientation() {
     supported: DEVICE_ORIENTATION_SUPPORTED,
     permissionGranted: false,
   });
-  const calibrationOffset = useRef(0);
+  const calibrationOffset = useRef({ beta: 0, gamma: 0 });
 
   const requestPermission = useCallback(async (): Promise<boolean> => {
     if (typeof DeviceOrientationEvent === 'undefined') return false;
@@ -47,13 +47,20 @@ export function useDeviceOrientation() {
 
   const calibrate = useCallback(() => {
     setState((current) => {
-      calibrationOffset.current = current.gamma ?? 0;
+      calibrationOffset.current = {
+        beta: current.beta ?? 0,
+        gamma: current.gamma ?? 0,
+      };
       return current;
     });
   }, []);
 
+  const getCalibratedBeta = useCallback(() => {
+    return (state.beta ?? 0) - calibrationOffset.current.beta;
+  }, [state.beta]);
+
   const getCalibratedGamma = useCallback(() => {
-    return (state.gamma ?? 0) - calibrationOffset.current;
+    return (state.gamma ?? 0) - calibrationOffset.current.gamma;
   }, [state.gamma]);
 
   useEffect(() => {
@@ -76,6 +83,7 @@ export function useDeviceOrientation() {
     ...state,
     requestPermission,
     calibrate,
+    getCalibratedBeta,
     getCalibratedGamma,
     calibrationOffset,
   };

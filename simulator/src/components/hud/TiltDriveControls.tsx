@@ -1,7 +1,6 @@
 'use client';
 
-import type { PointerEvent as ReactPointerEvent } from 'react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Compass, OctagonX, Pause, Play, RotateCcw } from 'lucide-react';
 import { useGameStore } from '@/lib/stores/game-store';
 import { getTrack } from '@/lib/tracks/track-data';
@@ -18,8 +17,6 @@ export function TiltDriveControls() {
   const controlScheme = useGameStore((s) => s.controlScheme);
   const gamepadConnected = useGameStore((s) => s.gamepadConnected);
   const setControlScheme = useGameStore((s) => s.setControlScheme);
-  const manualControls = useGameStore((s) => s.manualControls);
-  const analogThrottle = useGameStore((s) => s.analogThrottle);
   const setManualControl = useGameStore((s) => s.setManualControl);
   const resetManualControls = useGameStore((s) => s.resetManualControls);
   const setAnalogSteer = useGameStore((s) => s.setAnalogSteer);
@@ -29,15 +26,15 @@ export function TiltDriveControls() {
   const {
     supported,
     permissionGranted,
+    beta,
     gamma,
     requestPermission,
     calibrate,
+    getCalibratedBeta,
     getCalibratedGamma,
   } = useDeviceOrientation();
 
-  const [brakeFlash, setBrakeFlash] = useState(false);
   const [permissionMessage, setPermissionMessage] = useState<string | null>(null);
-  const brakeFlashTimeoutRef = useRef<number | null>(null);
 
   const isActive = driveMode === 'manual' && (mode === 'driving' || mode === 'paused');
   const isPaused = mode === 'paused';
@@ -64,20 +61,34 @@ export function TiltDriveControls() {
     if (!isActive || controlScheme !== 'tilt' || !supported) return;
     if (requiresPermission && !permissionGranted) {
       setAnalogSteer(0);
+      setAnalogThrottle(0);
+      setManualControl('brake', false);
       return;
     }
 
-    const maxTilt = 30;
-    const calibrated = getCalibratedGamma() / maxTilt;
-    setAnalogSteer(clamp(calibrated, -1, 1));
+    const steerRange = 28;
+    const pitchRange = 18;
+    const calibratedRoll = getCalibratedGamma();
+    const calibratedPitch = getCalibratedBeta();
+
+    const analogSteer = clamp(calibratedRoll / steerRange, -1, 1);
+    const pitchIntent = clamp((-calibratedPitch) / pitchRange, -1, 1);
+
+    setAnalogSteer(analogSteer);
+    setAnalogThrottle(pitchIntent > 0 ? pitchIntent : 0);
+    setManualControl('brake', pitchIntent < -0.2);
   }, [
+    beta,
     controlScheme,
     gamma,
+    getCalibratedBeta,
     getCalibratedGamma,
     isActive,
     permissionGranted,
     requiresPermission,
     setAnalogSteer,
+    setAnalogThrottle,
+    setManualControl,
     supported,
   ]);
 
@@ -87,14 +98,6 @@ export function TiltDriveControls() {
     setAnalogThrottle(0);
     setManualControl('brake', false);
   }, [controlScheme, isActive, setAnalogSteer, setAnalogThrottle, setManualControl]);
-
-  useEffect(() => {
-    return () => {
-      if (brakeFlashTimeoutRef.current !== null) {
-        window.clearTimeout(brakeFlashTimeoutRef.current);
-      }
-    };
-  }, []);
 
   if (!isCoarsePointer || gamepadConnected || !isActive || controlScheme !== 'tilt') {
     return null;
@@ -131,88 +134,14 @@ export function TiltDriveControls() {
       }
     }
     calibrate();
-    setPermissionMessage('Tilt center updated.');
-  }
-
-  function updateThrottleFromPointer(event: ReactPointerEvent<HTMLDivElement>) {
-    const rect = event.currentTarget.getBoundingClientRect();
-    const y = event.clientY - rect.top;
-    const normalized = 1 - (y / rect.height);
-    setManualControl('brake', false);
-    setAnalogThrottle(clamp(normalized, 0, 1));
-  }
-
-  function handleThrottleStart(event: ReactPointerEvent<HTMLDivElement>) {
-    event.preventDefault();
-    event.currentTarget.setPointerCapture(event.pointerId);
-    updateThrottleFromPointer(event);
-  }
-
-  function handleThrottleMove(event: ReactPointerEvent<HTMLDivElement>) {
-    if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
-    updateThrottleFromPointer(event);
-  }
-
-  function handleThrottleEnd(event: ReactPointerEvent<HTMLDivElement>) {
-    event.preventDefault();
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    }
-    setAnalogThrottle(0);
-  }
-
-  function handleBrakeStart(event: ReactPointerEvent<HTMLDivElement>) {
-    event.preventDefault();
-    event.currentTarget.setPointerCapture(event.pointerId);
-    setAnalogThrottle(0);
-    setManualControl('brake', true);
-    setBrakeFlash(true);
-    if (brakeFlashTimeoutRef.current !== null) {
-      window.clearTimeout(brakeFlashTimeoutRef.current);
-    }
-    brakeFlashTimeoutRef.current = window.setTimeout(() => setBrakeFlash(false), 180);
-  }
-
-  function handleBrakeEnd(event: ReactPointerEvent<HTMLDivElement>) {
-    event.preventDefault();
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    }
-    setManualControl('brake', false);
+    setPermissionMessage('Tilt center updated. Lean forward for gas, back for brake.');
   }
 
   return (
     <div className="pointer-events-none absolute inset-0 z-40">
-      <div
-        className="pointer-events-auto absolute inset-y-0 left-0 w-1/2 touch-manipulation"
-        onPointerDown={handleBrakeStart}
-        onPointerUp={handleBrakeEnd}
-        onPointerCancel={handleBrakeEnd}
-        onPointerLeave={handleBrakeEnd}
-        onContextMenu={(event) => event.preventDefault()}
-      >
-        <div className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full border border-red-400/30 bg-black/30 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-red-200 backdrop-blur-sm">
-          {manualControls.brake || brakeFlash ? 'Braking' : 'Brake'}
-        </div>
-      </div>
-
-      <div
-        className="pointer-events-auto absolute inset-y-0 right-0 w-1/2 touch-manipulation"
-        onPointerDown={handleThrottleStart}
-        onPointerMove={handleThrottleMove}
-        onPointerUp={handleThrottleEnd}
-        onPointerCancel={handleThrottleEnd}
-        onPointerLeave={handleThrottleEnd}
-        onContextMenu={(event) => event.preventDefault()}
-      >
-        <div className="absolute bottom-24 right-4 top-24 w-3 overflow-hidden rounded-full border border-cyan-300/35 bg-black/35 backdrop-blur-sm">
-          <div
-            className="absolute bottom-0 left-0 right-0 rounded-full bg-cyan-300/90 transition-all duration-75"
-            style={{ height: `${analogThrottle * 100}%` }}
-          />
-        </div>
-        <div className="absolute right-10 top-1/2 -translate-y-1/2 rounded-full border border-cyan-300/30 bg-black/30 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-cyan-100 backdrop-blur-sm">
-          Throttle
+      <div className="absolute inset-x-4 top-24 flex justify-center">
+        <div className="rounded-full border border-cyan-300/20 bg-slate-950/86 px-4 py-2 text-xs font-medium text-cyan-100 shadow-lg backdrop-blur-sm">
+          Tilt forward to accelerate, back to brake, left or right to steer.
         </div>
       </div>
 
@@ -255,7 +184,7 @@ export function TiltDriveControls() {
       </div>
 
       {permissionMessage || fallbackMessage ? (
-        <div className="pointer-events-none absolute inset-x-4 top-24 flex justify-center">
+        <div className="pointer-events-none absolute inset-x-4 top-40 flex justify-center">
           <div className="rounded-full border border-cyan-300/20 bg-slate-950/86 px-4 py-2 text-xs font-medium text-cyan-100 shadow-lg backdrop-blur-sm">
             {permissionMessage || fallbackMessage}
           </div>
