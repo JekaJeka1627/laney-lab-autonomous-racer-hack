@@ -47,6 +47,7 @@ export function useDeviceOrientation() {
 
   const calibrate = useCallback(() => {
     setState((current) => {
+      // Store the device's current pitch/roll as the neutral pose so users can recalibrate in-hand.
       calibrationOffset.current = {
         beta: current.beta ?? 0,
         gamma: current.gamma ?? 0,

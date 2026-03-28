@@ -136,6 +136,7 @@ function detectDefaultControlScheme(): 'buttons' | 'tilt' {
   const likelyMobileOrTablet = coarsePointer && smallViewport && (mobilePattern.test(userAgent) || ipadOs);
   const tiltSupported = typeof DeviceOrientationEvent !== 'undefined';
 
+  // Fresh mobile/tablet sessions default to tilt when motion sensors are available.
   return likelyMobileOrTablet && tiltSupported ? 'tilt' : 'buttons';
 }
 
@@ -181,6 +182,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     set((s) => ({ manualControls: { ...s.manualControls, [control]: active } })),
   resetManualControls: () =>
     set({
+      // Reset every manual input channel together so restarting a run cannot leave stale input behind.
       keys: {},
       manualControls: { left: false, right: false, accelerate: false, brake: false },
       input: { steer: 0, throttle: 0, brake: false },
@@ -193,6 +195,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   gamepadConnected: false,
   setGamepadConnected: (connected) => set({ gamepadConnected: connected }),
 
+  // `controlScheme` chooses the mobile manual path; keyboard remains available outside tilt mode.
   controlScheme: loadControlScheme(),
   setControlScheme: (controlScheme) => {
     set({ controlScheme });

@@ -71,6 +71,7 @@ export function TiltDriveControls() {
     const calibratedRoll = getCalibratedGamma();
     const calibratedPitch = getCalibratedBeta();
 
+    // Roll controls steering; pitch controls throttle/brake so tilt mode does not need touch zones.
     const analogSteer = clamp(calibratedRoll / steerRange, -1, 1);
     const pitchIntent = clamp((-calibratedPitch) / pitchRange, -1, 1);
 

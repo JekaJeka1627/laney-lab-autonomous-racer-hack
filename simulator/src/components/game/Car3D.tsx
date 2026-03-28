@@ -53,6 +53,7 @@ export function Car3D() {
     const effectiveMaxSpeed = MAX_SPEED * (store.maxSpeedPct / 100);
 
     if (isAuto) {
+      // AI mode owns steering/throttle completely; manual input paths below must not affect it.
       const wp = track.waypoints;
       let closestDist = Infinity;
       let closestIdx = aiWaypointIdx.current;
@@ -102,6 +103,7 @@ export function Car3D() {
       if (car.speed < clampedTarget) car.speed = Math.min(car.speed + ACCELERATION * dt, clampedTarget);
       else car.speed = Math.max(car.speed - FRICTION * 2 * dt, clampedTarget);
     } else if (store.gamepadConnected) {
+      // Input precedence for manual driving: gamepad wins over mobile tilt/buttons when connected.
       const { steer, throttle, brake } = store.input;
 
       car.steerTarget = steer;
@@ -123,6 +125,7 @@ export function Car3D() {
         else if (car.speed < 0) car.speed = Math.min(0, car.speed + FRICTION * dt);
       }
     } else if (store.controlScheme === 'tilt') {
+      // Tilt mode writes analog steer/throttle into the store; brake stays a separate boolean.
       car.steerTarget = store.analogSteer;
       car.throttleTarget = store.analogThrottle;
 
@@ -143,6 +146,7 @@ export function Car3D() {
         else if (car.speed < 0) car.speed = Math.min(0, car.speed + FRICTION * dt);
       }
     } else {
+      // Keyboard and touch buttons share the legacy manual path so non-mobile behavior stays unchanged.
       const keys = store.keys;
       const controls = store.manualControls;
       const up = controls.accelerate;
