@@ -36,6 +36,24 @@ _OUTPUT_TENSOR = "main_level/agent_0/main/online/network_0/ppo_head_0/policy:0"
 _MODEL_INPUT_SIZE = (84, 84)  # height x width used during DeepRacer training
 
 
+def _prepare_numpy_for_tensorflow() -> None:
+    """
+    Restore NumPy aliases removed in 2.x that older TensorFlow builds still import.
+    This keeps the car's preinstalled TensorFlow usable without downgrading NumPy.
+    """
+    alias_map = {
+        "object": object,
+        "bool": bool,
+        "int": int,
+        "float": float,
+        "complex": complex,
+        "str": str,
+    }
+    for name, value in alias_map.items():
+        if not hasattr(np, name):
+            setattr(np, name, value)
+
+
 @dataclass
 class ActionSpaceEntry:
     steering_angle: float  # degrees, negative = left
@@ -310,6 +328,7 @@ class TrackModelAdapter:
     def _try_convert_and_load(self, pb_path: Path, onnx_out: Path) -> bool:
         """Try converting .pb to .onnx using tf2onnx, then load the result."""
         try:
+            _prepare_numpy_for_tensorflow()
             import tf2onnx  # type: ignore[import-untyped]
             import tensorflow as tf
 
@@ -335,6 +354,7 @@ class TrackModelAdapter:
     def _load_tf(self, pb_path: Path) -> bool:
         """Load directly via TensorFlow (tf.compat.v1 frozen graph)."""
         try:
+            _prepare_numpy_for_tensorflow()
             import tensorflow as tf
 
             with tf.io.gfile.GFile(str(pb_path), "rb") as f:

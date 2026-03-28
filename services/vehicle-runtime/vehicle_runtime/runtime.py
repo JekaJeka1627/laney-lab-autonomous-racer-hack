@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import threading
 import time
 from dataclasses import dataclass
@@ -10,9 +11,12 @@ from vehicle_runtime.api_client import VehicleApiClient
 from vehicle_runtime.battery import BatteryMonitor, BatterySnapshot, MockBatteryMonitor
 from vehicle_runtime.config import RuntimeConfig
 from vehicle_runtime.frame_sources import FrameSource, build_frame_source
-from vehicle_runtime.predictor import OnnxSteeringPredictor, SteeringPredictor
+from vehicle_runtime.local_model_loader import get_marker_deployed_at, resolve_local_model
+from vehicle_runtime.predictor import AutoSteeringPredictor, SteeringPredictor
 from vehicle_runtime.safety import SafetyPolicy
 from vehicle_runtime.session_logger import RunSessionLogger, SessionArtifacts
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -68,7 +72,7 @@ class VehicleRuntime:
             serial_port=config.actuator_serial_port,
             serial_baudrate=config.actuator_serial_baudrate,
         )
-        self._predictor_factory = predictor_factory or OnnxSteeringPredictor
+        self._predictor_factory = predictor_factory or AutoSteeringPredictor
         self._predictor: SteeringPredictor | None = None
         self._api = VehicleApiClient(config.api_base_url) if config.api_base_url else None
         self._cache_dir = config.cache_dir
@@ -84,6 +88,8 @@ class VehicleRuntime:
         )
         self._manual_override: ControlCommand | None = None
         self._manual_override_until: float | None = None
+        self._local_model_dir = config.local_model_dir
+        self._last_marker_deployed_at: str | None = None
 
     def close(self) -> None:
         self.stop()
@@ -237,43 +243,110 @@ class VehicleRuntime:
         self._snapshot.session_id = session_id
         return session_id
 
-    def _resolve_target_model_version(self) -> str | None:
-        if self.config.pinned_model_version:
-            return self.config.pinned_model_version
+    def _try_load_local(self, *, force: bool = False) -> bool:
+        """
+        Try to load a model from the local .active-model/ directory.
+
+        Returns True if a model was loaded (or already current), False if
+        no local model is available and the caller should try the API.
+        """
+        resolved = resolve_local_model(self._local_model_dir)
+        if not resolved:
+            return False
+
+        deployed_at = resolved["deployed_at"]
+        version = resolved["model_version"]
+
+        # Check if the model has changed since last load
+        if not force and self._last_marker_deployed_at == deployed_at and self._predictor is not None:
+            with self._lock:
+                self._snapshot.target_model_version = version
+            return True
+
+        # Load it
+        model_path = resolved["model_path"]
+        logger.info(
+            "Loading local model: %s from %s (deployed_at=%s)",
+            resolved["display_name"], model_path, deployed_at,
+        )
+        self._predictor = self._predictor_factory(model_path)
+        self._last_marker_deployed_at = deployed_at
+        with self._lock:
+            self._snapshot.target_model_version = version
+            self._snapshot.loaded_model_version = version
+            self._snapshot.last_error = None
+        return True
+
+    def _try_load_api(self, *, force: bool = False) -> bool:
+        """
+        Try to load a model from the remote API.
+
+        Returns True if a model was loaded (or already current).
+        """
+        target_version = self.config.pinned_model_version
+        if not target_version and self._api:
+            target_version = self._api.get_active_model_version()
+
+        with self._lock:
+            self._snapshot.target_model_version = target_version
+
+        if not target_version:
+            return False
+
+        with self._lock:
+            if not force and self._snapshot.loaded_model_version == target_version and self._predictor is not None:
+                return True
+
         if not self._api:
-            return None
-        return self._api.get_active_model_version()
+            return False
+
+        model_path = Path(self._cache_dir) / "models" / target_version / "model.onnx"
+        self._api.download_model_onnx(target_version, model_path)
+        self._predictor = self._predictor_factory(model_path)
+        with self._lock:
+            self._snapshot.loaded_model_version = target_version
+            self._snapshot.last_error = None
+        return True
 
     def _load_predictor(self, *, force: bool = False) -> None:
+        """
+        Load the model predictor. Resolution order:
+        1. Local .active-model/ directory (zero-config, auto-detects changes)
+        2. Remote API (if VEHICLE_API_BASE_URL is set)
+        3. Pinned version (if VEHICLE_MODEL_VERSION is set)
+
+        Auto-reloads when the local marker file changes (switcher deployed a new model).
+        """
         with self._lock:
             now = self._time()
             if not force and (now - self._snapshot.last_model_refresh_at) < self.config.model_refresh_seconds:
-                return
+                # Between refreshes, still check if the local marker changed
+                # (cheap file stat vs full model load)
+                current_marker = get_marker_deployed_at(self._local_model_dir)
+                if current_marker and current_marker != self._last_marker_deployed_at:
+                    logger.info("Local model change detected, triggering reload.")
+                    force = True
+                else:
+                    return
             self._snapshot.last_model_refresh_at = now
 
         try:
-            target_version = self._resolve_target_model_version()
-            with self._lock:
-                self._snapshot.target_model_version = target_version
-            if not target_version:
-                self._predictor = None
-                with self._lock:
-                    self._snapshot.loaded_model_version = None
-                    self._snapshot.last_error = "No model configured (set VEHICLE_API_BASE_URL or VEHICLE_MODEL_VERSION)"
+            # Try local first -- if .active-model/ has an ONNX file, use it
+            if self._try_load_local(force=force):
                 return
 
-            with self._lock:
-                if not force and self._snapshot.loaded_model_version == target_version and self._predictor is not None:
-                    return
+            # Fall back to API
+            if self._try_load_api(force=force):
+                return
 
-            if not self._api:
-                raise RuntimeError("VEHICLE_API_BASE_URL is required to download model artifacts")
-            model_path = Path(self._cache_dir) / "models" / target_version / "model.onnx"
-            self._api.download_model_onnx(target_version, model_path)
-            self._predictor = self._predictor_factory(model_path)
+            # Nothing available
+            self._predictor = None
             with self._lock:
-                self._snapshot.loaded_model_version = target_version
-                self._snapshot.last_error = None
+                self._snapshot.loaded_model_version = None
+                self._snapshot.last_error = (
+                    "No model found. Place an .onnx file in the .active-model/ directory, "
+                    "or set VEHICLE_API_BASE_URL, or set VEHICLE_MODEL_VERSION."
+                )
         except Exception as exc:
             self._predictor = None
             with self._lock:

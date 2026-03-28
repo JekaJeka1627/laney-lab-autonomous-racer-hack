@@ -1,2 +1,7 @@
 # Model Registry CLI -- no external dependencies beyond Python 3.10+ stdlib.
 # The vehicle runtime's onnxruntime dependency is separate.
+
+# Dashboard (optional -- only needed if running the Streamlit UI)
+# pip install streamlit pandas
+streamlit>=1.30.0
+pandas>=2.0.0

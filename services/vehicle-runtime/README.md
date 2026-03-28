@@ -4,7 +4,8 @@ Physical racer runtime for camera -> model inference -> actuator control.
 
 ## What it does (v1)
 
-- Loads the active (or pinned) ONNX model from the shared API
+- Auto-discovers ONNX models from the local `.active-model/` directory (zero config)
+- Falls back to the shared API if no local model is found
 - Captures frames from a camera source (OpenCV or mock)
 - Runs ONNX inference (steering output in `[-1, 1]`)
 - Applies safety bounds / emergency stop behavior
@@ -12,13 +13,57 @@ Physical racer runtime for camera -> model inference -> actuator control.
 - Sends bounded steering + throttle commands to an actuator adapter
 - Records local autonomous session artifacts (`frames.zip`, `controls.csv`, `run.json`)
 - Optionally uploads recorded sessions to the shared Runs API
+- Auto-reloads when the model switcher deploys a new model
 - Exposes status/control endpoints over FastAPI
 
 ## Current scope
 
 - Real ONNX inference path is implemented
+- Local model auto-discovery and hot-reload implemented
 - Hardware interfaces are adapter-based with mock implementations included
 - Obstacle sensing, battery telemetry, and return-to-base are not implemented yet
+
+## Model Loading (zero config)
+
+The runtime automatically finds and loads models. No env vars or API needed for basic operation.
+
+### How it works
+
+1. **Local first:** Checks `.active-model/` for an `.onnx` file. If found, loads it immediately.
+2. **Auto-reload:** When the model switcher deploys a new model, the runtime detects the change and reloads automatically.
+3. **API fallback:** If no local model exists, falls back to the shared API (requires `VEHICLE_API_BASE_URL`).
+4. **Pinned version:** If `VEHICLE_MODEL_VERSION` is set, uses that specific version from the API.
+
+### Typical workflow
+
+```bash
+# From the repo root -- switch the active model
+python -m model_registry.cli set-active center-align
+
+# The switcher:
+#   1. Copies model files to services/vehicle-runtime/.active-model/
+#   2. Writes active_model_marker.json with timestamp
+#   3. Pokes the runtime's /model/reload endpoint (if running)
+#
+# The runtime:
+#   1. Detects the new marker timestamp
+#   2. Finds the .onnx file in .active-model/
+#   3. Loads it automatically
+#   4. Starts using the new model on the next inference tick
+```
+
+No restart needed. No env vars to set. Just `set-active` and drive.
+
+### Manual model loading (no registry)
+
+You can also just drop an `.onnx` file into `.active-model/` directly:
+
+```bash
+cp my-model.onnx services/vehicle-runtime/.active-model/
+# Runtime will find it on the next refresh cycle (default: 30 seconds)
+# Or trigger immediate reload:
+curl -X POST http://localhost:8100/model/reload
+```
 
 ## Quick start (mock mode)
 
@@ -29,8 +74,10 @@ uvicorn vehicle_runtime.main:app --reload --port 8100
 
 Optional env vars:
 
+- `VEHICLE_LOCAL_MODEL_DIR=.active-model` (path to local model directory, default works with switcher)
 - `VEHICLE_API_BASE_URL` (e.g. `https://shared-runs-api-production.up.railway.app`)
 - `VEHICLE_MODEL_VERSION` (pins model; otherwise uses active model)
+- `VEHICLE_MODEL_REFRESH_SECONDS=30` (how often to check for model changes)
 - `VEHICLE_CAMERA_BACKEND=mock|opencv`
 - `VEHICLE_ACTUATOR_BACKEND=mock|stdout|serial`
 - `VEHICLE_ACTUATOR_SERIAL_PORT=COM7` (Windows) or `/dev/ttyUSB0` (Linux)

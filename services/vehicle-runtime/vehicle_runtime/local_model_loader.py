@@ -18,21 +18,24 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 MARKER_FILENAME = "active_model_marker.json"
+SUPPORTED_MODEL_FILENAMES = ("model.onnx", "model.pb")
 
 
-def find_onnx_file(model_dir: Path) -> Path | None:
-    """Find the first .onnx file in the model directory."""
+def find_model_file(model_dir: Path) -> Path | None:
+    """Find the first supported model file in the model directory."""
     if not model_dir.is_dir():
         return None
-    onnx_files = sorted(model_dir.glob("*.onnx"))
-    if onnx_files:
-        return onnx_files[0]
+    for filename in SUPPORTED_MODEL_FILENAMES:
+        direct = sorted(model_dir.glob(filename))
+        if direct:
+            return direct[0]
     # Check one level deeper (some archives extract into a subfolder)
     for sub in sorted(model_dir.iterdir()):
         if sub.is_dir():
-            nested = sorted(sub.glob("*.onnx"))
-            if nested:
-                return nested[0]
+            for filename in SUPPORTED_MODEL_FILENAMES:
+                nested = sorted(sub.glob(filename))
+                if nested:
+                    return nested[0]
     return None
 
 
@@ -62,32 +65,35 @@ def resolve_local_model(model_dir: Path) -> dict | None:
 
     Returns a dict with model info if found, None otherwise:
         {
-            "model_path": Path,      # absolute path to .onnx file
+            "model_path": Path,      # absolute path to supported model file
             "model_id": str,         # from marker or "local"
             "model_version": str,    # from marker or file mtime
             "deployed_at": str,      # from marker or ""
             "display_name": str,     # from marker or filename
+            "format": str,           # "onnx" or "tensorflow-pb"
             "source": "local",
         }
     """
     if not model_dir.is_dir():
         return None
 
-    onnx_path = find_onnx_file(model_dir)
-    if not onnx_path:
+    model_path = find_model_file(model_dir)
+    if not model_path:
         return None
 
     marker = read_marker(model_dir) or {}
     model_id = marker.get("model_id", "local")
-    version = marker.get("version", str(int(onnx_path.stat().st_mtime)))
+    version = marker.get("version", str(int(model_path.stat().st_mtime)))
     deployed_at = marker.get("deployed_at", "")
-    display_name = marker.get("display_name", onnx_path.stem)
+    display_name = marker.get("display_name", model_path.stem)
+    model_format = marker.get("format", "onnx" if model_path.suffix == ".onnx" else "tensorflow-pb")
 
     return {
-        "model_path": onnx_path,
+        "model_path": model_path,
         "model_id": model_id,
         "model_version": f"{model_id}@{version}",
         "deployed_at": deployed_at,
         "display_name": display_name,
+        "format": model_format,
         "source": "local",
     }

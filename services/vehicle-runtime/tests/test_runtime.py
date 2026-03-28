@@ -48,6 +48,7 @@ def build_config() -> RuntimeConfig:
         loop_sleep_ms=50,
         stale_frame_timeout_ms=750,
         cache_dir=Path(".vehicle-runtime-test-cache"),
+        local_model_dir=Path(".active-model"),
         autostart=False,
         user_id="vehicle-test",
         track_id="physical-track",

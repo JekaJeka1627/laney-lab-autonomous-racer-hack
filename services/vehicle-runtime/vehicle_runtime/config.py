@@ -31,6 +31,7 @@ class RuntimeConfig:
     loop_sleep_ms: int
     stale_frame_timeout_ms: int
     cache_dir: Path
+    local_model_dir: Path
     autostart: bool
     user_id: str
     track_id: str
@@ -58,6 +59,7 @@ def load_config() -> RuntimeConfig:
         loop_sleep_ms=int(os.getenv("VEHICLE_LOOP_SLEEP_MS", "50")),
         stale_frame_timeout_ms=int(os.getenv("VEHICLE_STALE_FRAME_TIMEOUT_MS", "750")),
         cache_dir=Path(os.getenv("VEHICLE_CACHE_DIR", ".vehicle-runtime-cache")),
+        local_model_dir=Path(os.getenv("VEHICLE_LOCAL_MODEL_DIR", ".active-model")),
         autostart=_env_bool("VEHICLE_AUTOSTART", False),
         user_id=os.getenv("VEHICLE_USER_ID", "vehicle-runtime"),
         track_id=os.getenv("VEHICLE_TRACK_ID", "physical-track"),
