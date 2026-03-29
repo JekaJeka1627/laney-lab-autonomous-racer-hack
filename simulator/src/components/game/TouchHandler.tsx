@@ -90,17 +90,11 @@ export function TouchHandler() {
       store.setInput({ steer: 0, throttle: 0, brake: false });
       setJoystick(null);
     }
-    function onTouchCancel() {
-      activeTouchId.current = null;
-      useGameStore.getState().setActiveInputDevice('keyboard');
-      useGameStore.getState().setInput({ steer: 0, throttle: 0, brake: false });
-      setJoystick(null);
-    }
 
     // then swap the listener:
-    window.addEventListener('touchcancel', onTouchCancel);
+    window.addEventListener('touchcancel', onTouchEnd);
     // and in cleanup:
-    window.removeEventListener('touchcancel', onTouchCancel);
+    window.removeEventListener('touchcancel', onTouchEnd);
 
 
     window.addEventListener('touchstart', onTouchStart, { passive: true });
