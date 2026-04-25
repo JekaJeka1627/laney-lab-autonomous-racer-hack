@@ -263,6 +263,15 @@ export function LapCompletion() {
         </animated.div>
       </div>
 
+      {/* Overlay */}
+      {
+      //disabling because overlay background and blur is distracting
+      //while doing multiple laps
+      /*<div
+        className="lap-completion-overlay"
+        aria-hidden="true"
+      />*/
+      }
     </div>
   );
 }

@@ -8,6 +8,7 @@ import { Minimap } from '@/components/minimap/Minimap';
 import { KeyboardHandler } from '@/components/game/KeyboardHandler';
 import { GamepadHandler } from '@/components/game/GamepadHandler';
 import { PreDriveGuide } from '@/components/game/PreDriveGuide';
+import { TouchHandler } from '@/components/game/TouchHandler';
 import { PauseOverlay } from '@/components/game/PauseOverlay';
 import { AutoControls } from '@/components/game/AutoControls';
 import { RunComplete } from '@/components/game/RunComplete';
@@ -35,6 +36,7 @@ export default function Home() {
     <>
       <KeyboardHandler />
       <GamepadHandler />
+      <TouchHandler />
       {!inGame ? (
         <TrackSelect />
       ) : inPreDriveGuide ? (

@@ -53,13 +53,13 @@ export function KeyboardHandler() {
       }
 
       keysRef.current[e.key] = true;
-      if (!store.gamepadConnected) store.setInput(computeInput());
+      if (store.activeInputDevice === 'keyboard') store.setInput(computeInput());
     }
 
     function onKeyUp(e: KeyboardEvent) {
       keysRef.current[e.key] = false;
       const store = useGameStore.getState();
-      if (!store.gamepadConnected) store.setInput(computeInput());
+      if (store.activeInputDevice === 'keyboard') store.setInput(computeInput());
     }
 
     window.addEventListener('keydown', onKeyDown);

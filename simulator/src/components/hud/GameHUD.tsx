@@ -31,7 +31,7 @@ export function GameHUD() {
   const loadedModelVersion = useAiDriverStore((s) => s.loadedModelVersion);
 
   const isAI = driveMode === 'ai';
-  const gamepadConnected = useGameStore((s) => s.gamepadConnected);
+  const activeInputDevice = useGameStore((s) => s.activeInputDevice);
 
   return (
     <div className="absolute inset-0 pointer-events-none z-10">
@@ -111,9 +111,9 @@ export function GameHUD() {
       {!isAI && (mode === 'driving' || mode === 'paused') && (
         <div className="absolute bottom-4 left-14 bg-black/70 backdrop-blur-sm rounded-2xl border border-gray-700/50 px-4 py-3 text-white text-xs space-y-1.5">
           <div className="text-[9px] uppercase tracking-wider text-gray-500 font-medium mb-1">
-            {gamepadConnected ? 'Gamepad' : 'Controls'}
+            {activeInputDevice === 'gamepad' ? 'Gamepad' : activeInputDevice === 'touch' ? 'Touch' : 'Controls'}
           </div>
-          {gamepadConnected ? (
+          {activeInputDevice === 'gamepad' ? (
             <>
               <div className="flex items-center gap-2">
                 <kbd className="bg-gray-700 px-1.5 py-0.5 rounded text-[10px] font-mono min-w-[28px] text-center">RT/R2</kbd>
@@ -129,6 +129,22 @@ export function GameHUD() {
               <div className="flex items-center gap-2">
                 <kbd className="bg-gray-700 px-1.5 py-0.5 rounded text-[10px] font-mono min-w-[28px] text-center">Start</kbd>
                 <span className="text-gray-300">Pause</span>
+              </div>
+            </>
+          ) : activeInputDevice === 'touch' ? (
+            <>
+              <div className="flex items-center gap-2">
+                <span className="text-gray-300">Drag</span>
+                <span className="text-gray-500">↑</span>
+                <span className="text-gray-300">Gas</span>
+                <span className="text-gray-600 mx-1">·</span>
+                <span className="text-gray-500">↓</span>
+                <span className="text-gray-300">Brake</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-gray-300">Drag</span>
+                <span className="text-gray-500">←→</span>
+                <span className="text-gray-300">Steer</span>
               </div>
             </>
           ) : (

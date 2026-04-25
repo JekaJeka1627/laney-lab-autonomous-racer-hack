@@ -87,10 +87,10 @@ export function curveTrack(
     // (If it's the last node and not a closed loop, pointer stays empty)
     tracks[currentId] = newNode;
   }
-
+  //console.table(tracks);
   return tracks;
 }
-
+/*
 export function sCurveTrack(
   prefix: string = "scurve",
   numPoints: number = 80,
@@ -128,7 +128,7 @@ export function sCurveTrack(
 
   return tracks;
 }
-
+*/
 export function straightawayTrack(
   prefix: string,
   startX: number,
@@ -201,6 +201,85 @@ function createStadiumTrack(): Record<string, TrackPointNode> {
   return stadiumGraph;
 }
 
+function createSTrack(): Record<string, TrackPointNode> {
+  const straight1 = straightawayTrack("str1", 0, 60, 0, 40, 6, 5);
+
+  const chicaneC1 = curveTrack(
+    "c1",
+    20,
+    40,
+    20,
+    20,
+    10,
+    5,
+    false,
+    Math.PI,
+    (3 * Math.PI) / 2,
+  );
+
+  const chicaneC2 = curveTrack(
+    "c2",
+    20,
+    0,
+    20,
+    20,
+    10,
+    5,
+    false,
+    Math.PI / 2,
+    0,
+  );
+
+  const straight2 = straightawayTrack("str2", 40, 0, 40, -40, 10, 5);
+
+  const topCurve = curveTrack(
+    "top",
+    60,
+    -40,
+    20,
+    20,
+    10,
+    5,
+    false,
+    Math.PI,
+    Math.PI * 2,
+  );
+
+  const returnStraight = straightawayTrack("ret", 80, -40, 80, 60, 16, 5);
+
+  const bottomCurve = curveTrack(
+    "bot",
+    40,
+    60,
+    40,
+    20,
+    15,
+    5,
+    false,
+    0,
+    Math.PI,
+  );
+
+  const sGraph = {
+    ...straight1,
+    ...chicaneC1,
+    ...chicaneC2,
+    ...straight2,
+    ...topCurve,
+    ...returnStraight,
+    ...bottomCurve,
+  };
+
+  sGraph["str1-5"].nextTrackPointIds.push("c1-0");
+  sGraph["c1-9"].nextTrackPointIds.push("c2-0");
+  sGraph["c2-9"].nextTrackPointIds.push("str2-0");
+  sGraph["str2-9"].nextTrackPointIds.push("top-0");
+  sGraph["top-9"].nextTrackPointIds.push("ret-0");
+  sGraph["ret-15"].nextTrackPointIds.push("bot-0");
+  sGraph["bot-14"].nextTrackPointIds.push("str1-0");
+
+  return sGraph;
+}
 /**
  * Compute the heading angle from the spawn point toward the nearest
  * next waypoint so the car faces along the track at start.
@@ -317,7 +396,7 @@ function graphToArray(
 const ovalWaypoints = curveTrack("oval", 0, 0, 30, 20, 64, 5, true);
 const nascarRacingWaypoints = curveTrack("oval", 0, 0, 62, 38, 96, 7.5, true);
 const stadiumWaypoints = createStadiumTrack();
-const sCurveWaypoints = sCurveTrack("sCurve", 100, 4.5);
+const sCurveWaypoints = createSTrack();
 const cityWaypoints: TrackPoint[] = [
   { x: -25, z: -25 },
   { x: -25, z: 25 },
@@ -525,16 +604,16 @@ export const TRACKS: TrackDef[] = [
     waypoints: graphToArray(ovalWaypoints),
     waypointsGraph: ovalWaypoints,
   },
-  // --- S-TRACK ADDED-INVIRONMENT
   {
-    id: "serpent-s",
-    name: "The Serpent",
-    difficulty: "intermediate",
-    description: "A custom S-shaped challenge",
-    width: 5.0,
-    spawnPos: [0, 0.5, 0],
-    spawnRotation: computeSpawnRotation(0, 0, serpentWaypoints),
-    waypoints: serpentWaypoints,
+    id: "stadium",
+    name: "Stadium",
+    difficulty: "beginner",
+    description: "A continuous loop made of straightaways and semicircles",
+    width: 5,
+    spawnPos: [20, 0.5, 30],
+    spawnRotation: computeSpawnRotationGraph(20, 30, stadiumWaypoints),
+    waypoints: graphToArray(stadiumWaypoints, "right-0"),
+    waypointsGraph: stadiumWaypoints,
   },
   {
     id: "nascar-racing-track",
@@ -551,25 +630,29 @@ export const TRACKS: TrackDef[] = [
     obstacles: nascarRacingObstacles,
   },
   {
-    id: "stadium",
-    name: "Stadium",
-    difficulty: "beginner",
-    description: "A continuous loop made of straightaways and semicircles",
-    width: 5,
-    spawnPos: [20, 0.5, 30],
-    spawnRotation: computeSpawnRotationGraph(20, 30, stadiumWaypoints),
-    waypoints: graphToArray(stadiumWaypoints, "right-0"),
-    waypointsGraph: stadiumWaypoints,
-  },
-  {
     id: "s-curves",
     name: "S-Curves",
     difficulty: "intermediate",
     description: "Tests smooth steering transitions",
-    width: 4.5,
-    spawnPos: [0, 0.5, -40],
-    spawnRotation: computeSpawnRotationGraph(0, -40, sCurveWaypoints),
-    waypoints: graphToArray(sCurveWaypoints),
+    width: 5,
+
+    // Drop the car at the new start of the entrance straightaway
+    spawnPos: [0, 0.5, 60],
+    spawnRotation: computeSpawnRotationGraph(0, 60, sCurveWaypoints),
+
+    waypoints: graphToArray(sCurveWaypoints, "str1-0"),
+    waypointsGraph: sCurveWaypoints,
+  },
+  // --- S-TRACK ADDED-INVIRONMENT
+  {
+    id: "serpent-s",
+    name: "The Serpent",
+    difficulty: "intermediate",
+    description: "A custom S-shaped challenge",
+    width: 5.0,
+    spawnPos: [0, 0.5, 0],
+    spawnRotation: computeSpawnRotation(0, 0, serpentWaypoints),
+    waypoints: serpentWaypoints,
   },
   {
     id: "city-circuit",
