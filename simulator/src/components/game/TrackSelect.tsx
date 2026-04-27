@@ -7,30 +7,17 @@ import { TRACKS } from '@/lib/tracks/track-data';
 import { getStats, type AccumulatedStats } from '@/lib/data/training-data';
 import { getRemoteRunsSummary, isApiConfigured } from '@/lib/api/api-client';
 import { Play, Lock, Trophy, Zap, Bot, Info, Database, BarChart3 } from 'lucide-react';
-
-const difficultyColors: Record<string, string> = {
-  beginner: 'text-green-400 bg-green-400/10 border-green-400/30',
-  intermediate: 'text-yellow-400 bg-yellow-400/10 border-yellow-400/30',
-  advanced: 'text-red-400 bg-red-400/10 border-red-400/30',
-  special: 'text-purple-400 bg-purple-400/10 border-purple-400/30',
-};
+import { TrackDifficultyDisplay, type DifficultyTier } from './TrackSelect.difficulty';
+import { TrackLapTimeDisplay } from './TrackSelect.laptime';
+import { enterPreDriveGuide } from '@/lib/tracks/start-run';
 
 const MIN_DISPLAY_RUNS = 125;
 const MIN_DISPLAY_LAPS = 125;
-
-let trackVisualSeedCounter = 1;
-function nextTrackVisualSeed(): number {
-  trackVisualSeedCounter = (trackVisualSeedCounter + 1) & 0x7fffffff;
-  if (trackVisualSeedCounter === 0) trackVisualSeedCounter = 1;
-  return trackVisualSeedCounter;
-}
 
 /**
  * Track selection menu — shown before driving.
  */
 export function TrackSelect() {
-  const setTrackId = useGameStore((s) => s.setTrackId);
-  const setMode = useGameStore((s) => s.setMode);
   const labRandomizationEnabled = useGameStore((s) => s.labRandomizationEnabled);
   const setLabRandomizationEnabled = useGameStore((s) => s.setLabRandomizationEnabled);
 
@@ -63,35 +50,12 @@ export function TrackSelect() {
   const rawTotalRuns = cloudSummary?.runs ?? localStats.totalRuns ?? 0;
   const totalRuns = cloudSummary ? Math.max(rawTotalRuns, MIN_DISPLAY_RUNS) : rawTotalRuns;
 
-  function initTrack(trackId: string) {
-    setTrackId(trackId);
-    useGameStore.getState().resetLaps();
-    useGameStore.getState().clearControlLog();
-    const track = TRACKS.find((t) => t.id === trackId)!;
-    const visualSeed = (track.environment === 'lab' && labRandomizationEnabled)
-      ? nextTrackVisualSeed()
-      : 0;
-    useGameStore.getState().setTrackVisualSeed(visualSeed);
-    useGameStore.getState().updateCar({
-      x: track.spawnPos[0],
-      z: track.spawnPos[2],
-      rotation: track.spawnRotation,
-      speed: 0,
-      steering: 0,
-      throttle: 0,
-    });
-  }
-
   function startDriving(trackId: string) {
-    initTrack(trackId);
-    useGameStore.getState().setDriveMode('manual');
-    setMode('driving');
+    enterPreDriveGuide(trackId, 'manual');
   }
 
   function startAutonomous(trackId: string) {
-    initTrack(trackId);
-    useGameStore.getState().setDriveMode('ai');
-    setMode('autonomous');
+    enterPreDriveGuide(trackId, 'ai');
   }
 
   return (
@@ -142,7 +106,7 @@ export function TrackSelect() {
         </div>
 
         {/* Track cards */}
-        <div className="grid gap-4">
+        <div className="grid gap-8">
           {TRACKS.map((track) => {
             const locked = track.unlockRequirement
               ? totalLaps < track.unlockRequirement.totalClassLaps
@@ -156,22 +120,22 @@ export function TrackSelect() {
                 onClick={() => !locked && startDriving(track.id)}
                 onKeyDown={(e) => { if (!locked && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); startDriving(track.id); } }}
                 aria-disabled={locked || undefined}
+                style={{ paddingLeft: '2.75rem', paddingRight: '2.75rem' }}
                 className={[
-                  'w-full text-left rounded-2xl border p-5 transition-all',
+                  'w-full text-left rounded-2xl border transition-all',
                   locked
                     ? 'border-gray-700 bg-gray-800/30 opacity-50 cursor-not-allowed'
                     : 'border-gray-700 bg-white/5 hover:bg-white/10 hover:border-blue-500/50 cursor-pointer',
                 ].join(' ')}
               >
-                <div className="flex items-center justify-between">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-3">
-                      <h2 className="text-xl font-semibold">{track.name}</h2>
-                      <span className={`text-xs px-2 py-0.5 rounded-full border ${difficultyColors[track.difficulty]}`}>
-                        {track.difficulty}
-                      </span>
+                <div className="flex items-center justify-between gap-6 sm:gap-8 py-6 sm:py-7 min-h-[124px]">
+                  <div className="space-y-3.5 pr-4">
+                    <h2 className="text-xl font-semibold">{track.name}</h2>
+                    <div className="flex items-center gap-4 flex-wrap">
+                      <TrackDifficultyDisplay tier={track.difficulty as DifficultyTier} isLocked={locked} />
+                      <TrackLapTimeDisplay text="Est. lap time: Coming soon" isLocked={locked} />
                     </div>
-                    <p className="text-sm text-gray-400">{track.description}</p>
+                    <p className="text-sm text-gray-400 leading-relaxed">{track.description}</p>
                     {locked && track.unlockRequirement && (
                       <p className="text-xs text-gray-500 flex items-center gap-1 mt-1">
                         <Lock className="w-3 h-3" />
@@ -180,7 +144,7 @@ export function TrackSelect() {
                     )}
                   </div>
                   {!locked && (
-                    <div className="flex items-center gap-2 flex-shrink-0">
+                    <div className="flex items-center gap-3 flex-shrink-0">
                       <button
                         onClick={(e) => { e.stopPropagation(); startAutonomous(track.id); }}
                         className="w-11 h-11 rounded-full bg-purple-600 hover:bg-purple-500 flex items-center justify-center transition-colors"

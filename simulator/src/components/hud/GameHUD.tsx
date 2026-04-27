@@ -3,6 +3,7 @@
 import { useGameStore } from '@/lib/stores/game-store';
 import { useAiDriverStore } from '@/lib/inference/ai-driver-store';
 import { Timer, Trophy, Zap, AlertTriangle, Bot } from 'lucide-react';
+import { LapCompletion } from './LapCompletion';
 
 function formatTime(ms: number): string {
   const totalSec = ms / 1000;
@@ -34,6 +35,8 @@ export function GameHUD() {
 
   return (
     <div className="absolute inset-0 pointer-events-none z-10">
+      <LapCompletion />
+      
       {/* Top bar */}
       <div className="absolute top-4 left-4 right-4 flex items-start justify-between">
         {/* Track + Lap info */}

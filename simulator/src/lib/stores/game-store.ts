@@ -35,9 +35,10 @@ export interface ControlFrame {
 
 interface GameState {
   // Game mode
-  mode: 'menu' | 'driving' | 'paused' | 'replay' | 'autonomous' | 'auto-paused' | 'run-complete';
+  mode: 'menu' | 'pre-drive-guide' | 'driving' | 'paused' | 'replay' | 'autonomous' | 'auto-paused' | 'run-complete';
   trackId: string;
   driveMode: 'manual' | 'ai';
+  pendingDriveMode: 'manual' | 'ai' | null;
   aiModelSelectionMode: 'active' | 'pinned';
   aiPinnedModelVersion: string | null;
   aiSteeringMode: 'learned' | 'waypoint';
@@ -46,6 +47,10 @@ interface GameState {
   setTrackId: (id: string) => void;
   setMode: (mode: GameState['mode']) => void;
   setDriveMode: (dm: GameState['driveMode']) => void;
+  setPendingDriveMode: (dm: GameState['pendingDriveMode']) => void;
+  enterPreDriveGuide: (dm: GameState['driveMode']) => void;
+  continueFromPreDriveGuide: () => void;
+  backToMenuFromPreDriveGuide: () => void;
   setAiModelSelectionMode: (mode: 'active' | 'pinned') => void;
   setAiPinnedModelVersion: (version: string | null) => void;
   setAiSteeringMode: (mode: 'learned' | 'waypoint') => void;
@@ -120,6 +125,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   mode: 'menu',
   trackId: 'oval',
   driveMode: 'manual',
+  pendingDriveMode: null,
   aiModelSelectionMode: 'active',
   aiPinnedModelVersion: null,
   aiSteeringMode: 'learned',
@@ -128,6 +134,25 @@ export const useGameStore = create<GameState>((set, get) => ({
   setTrackId: (id) => set({ trackId: id }),
   setMode: (mode) => set({ mode }),
   setDriveMode: (dm) => set({ driveMode: dm }),
+  setPendingDriveMode: (pendingDriveMode) => set({ pendingDriveMode }),
+  enterPreDriveGuide: (pendingDriveMode) => set((s) => {
+    if (s.mode === 'pre-drive-guide' && s.pendingDriveMode === pendingDriveMode) return s;
+    return { mode: 'pre-drive-guide', pendingDriveMode };
+  }),
+  continueFromPreDriveGuide: () => set((s) => {
+    if (s.mode !== 'pre-drive-guide') return s;
+    if (s.pendingDriveMode === 'manual') {
+      return { mode: 'driving', driveMode: 'manual', pendingDriveMode: null };
+    }
+    if (s.pendingDriveMode === 'ai') {
+      return { mode: 'autonomous', driveMode: 'ai', pendingDriveMode: null };
+    }
+    return { mode: 'menu', pendingDriveMode: null };
+  }),
+  backToMenuFromPreDriveGuide: () => set((s) => {
+    if (s.mode !== 'pre-drive-guide') return s;
+    return { mode: 'menu' };
+  }),
   setAiModelSelectionMode: (aiModelSelectionMode) => set({ aiModelSelectionMode }),
   setAiPinnedModelVersion: (aiPinnedModelVersion) => set({ aiPinnedModelVersion }),
   setAiSteeringMode: (aiSteeringMode) => set({ aiSteeringMode }),
