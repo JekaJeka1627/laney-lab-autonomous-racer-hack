@@ -23,7 +23,6 @@
     "onnxruntime-web": "^1.24.2",
     "react": "19.2.3",
     "react-dom": "19.2.3",
-    "react-spring": "^10.0.3",
     "recharts": "^3.7.0",
     "three": "^0.182.0",
     "zustand": "^5.0.11"
